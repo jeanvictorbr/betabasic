@@ -1,8 +1,9 @@
+// File: handlers/buttons/oauth_force_join.js
 const axios = require('axios');
 const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
-    id: 'oauth_force_join_check',
+    customId: 'oauth_force_join_check', // AQUI estava o erro, corrigido para 'customId'
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
 
@@ -15,7 +16,7 @@ module.exports = {
         }
 
         try {
-            // Chama a API do sistema Auth que criamos (POST /api/join/:userId/:guildId)
+            // Chama a API do sistema Auth que criamos na porta 8080
             const response = await axios.post(`${authSystemUrl}/api/join/${userId}/${guildId}`);
 
             if (response.data.success) {
@@ -30,11 +31,13 @@ module.exports = {
             }
 
         } catch (error) {
-            console.error(error);
+            console.error('[OAuth Join]', error.message);
             
-            let errorMsg = "Não foi possível verificar sua conta.";
+            let errorMsg = "Não foi possível verificar sua conta. Tente novamente mais tarde.";
+            
+            // Se der erro 404, significa que o usuário não está no banco de dados do Auth System
             if (error.response && error.response.status === 404) {
-                errorMsg = "Você ainda não fez login pelo link. Por favor, clique no botão **Verificar Agora** primeiro.";
+                errorMsg = "Você ainda não fez login pelo link seguro. Por favor, clique no botão **Verificar Agora** primeiro para registrar sua conta.";
             }
 
             const embed = new EmbedBuilder()
