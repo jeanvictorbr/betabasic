@@ -3,47 +3,82 @@ const { V2_FLAG, EPHEMERAL_FLAG } = require('../../utils/constants.js');
 
 function getOAuthHubMenu(settings) {
 
-    // Verifica o status do 'Secret'
-    const oauthSecret = settings?.cloudflow_oauth_secret;
-    const hasSecret = !!oauthSecret;
-    
-    // Verifica o status da 'Vitrine'
+    // --- NOVO SISTEMA DE AUTH (Integração) ---
+    // Pega a URL que definimos no .env (porta 8080 da Discloud)
+    const authSystemUrl = process.env.AUTH_SYSTEM_URL;
+    const isConnected = !!authSystemUrl;
+    const systemStatus = isConnected ? '🟢 Conectado' : '🔴 Não Configurado (.env)';
+
+    // --- SISTEMA ANTIGO / VITRINE ---
     const roleId = settings.cloudflow_verify_role_id;
     const channelId = settings.cloudflow_verify_channel_id;
     const messageId = settings.cloudflow_verify_message_id;
     const showcaseStatus = roleId && channelId && messageId ? '🟢 Ativa' : '🟡 Incompleta';
 
     const v2_components = [
-        { "type": 10, "content": "## 🔗 Verificação via OAuth (CloudFlow)" },
-        { "type": 10, "content": "> Este é o método de verificação mais **robusto e confiável**. Ele vincula a conta Discord do membro ao seu sistema, permitindo que você (Admin) transfira membros entre servidores e recupere o acesso deles caso o percam." },
+        { "type": 10, "content": "## 🛡️ Sistema de Auth 2.0 (Backend Externo)" },
+        { "type": 10, "content": "> Painel de controle integrado ao novo sistema de OAuth2 (PostgreSQL)." },
         { "type": 14, "divider": true, "spacing": 2 },
 
+        // --- ITEM 1: STATUS DO BACKEND & TESTE ---
         {
-            "type": 9, "accessory": { "type": 2, "style": 1, "label": "Gerenciar", "emoji": { "name": "👥" }, "custom_id": "aut_oauth_manage_members" },
+            "type": 9,
+            "accessory": { 
+                "type": 2, 
+                "style": 5, // Style 5 = Link Button
+                "label": "Testar Login", 
+                "emoji": { "name": "🔗" }, 
+                "url": isConnected ? `${authSystemUrl}/login` : "https://discord.com",
+                "disabled": !isConnected
+            },
+            "components": [
+                { "type": 10, "content": "### Status da API (Porta 8080)" },
+                { "type": 10, "content": `> Conexão com o app externo.\n> **Estado:** ${systemStatus}` }
+            ]
+        },
+        { "type": 14, "divider": true, "spacing": 1 },
+
+        // --- ITEM 2: FORÇAR ENTRADA (SEU FOCO PRINCIPAL) ---
+        {
+            "type": 9,
+            "accessory": { 
+                "type": 2, 
+                "style": 1, // Style 1 = Primary (Blurple)
+                "label": "Forçar Entrada", 
+                "emoji": { "name": "🚀" }, 
+                "custom_id": "oauth_force_join_check", // Handler que criamos para chamar a API /api/join
+                "disabled": !isConnected
+            },
+            "components": [
+                { "type": 10, "content": "### Force Join (Adicionar Membro)" },
+                { "type": 10, "content": "> **Prioridade:** Adicione um membro ao servidor forçadamente utilizando o token salvo no banco de dados." }
+            ]
+        },
+        { "type": 14, "divider": true, "spacing": 1 },
+
+        // --- ITEM 3: GERENCIADOR (MANTIDO) ---
+        {
+            "type": 9,
+            "accessory": { "type": 2, "style": 2, "label": "Gerenciar", "emoji": { "name": "👥" }, "custom_id": "aut_oauth_manage_members" },
             "components": [
                 { "type": 10, "content": "### Gerenciador de Membros" },
                 { "type": 10, "content": "> Veja, remova, bana ou transfira membros que já se verificaram." }
             ]
         },
         { "type": 14, "divider": true, "spacing": 1 },
+
+        // --- ITEM 4: VITRINE (MANTIDO) ---
         {
-            "type": 9, "accessory": { "type": 2, "style": 1, "label": "Configurar", "emoji": { "name": "🎨" }, "custom_id": "aut_oauth_config_showcase" },
+            "type": 9,
+            "accessory": { "type": 2, "style": 2, "label": "Configurar", "emoji": { "name": "🎨" }, "custom_id": "aut_oauth_config_showcase" },
             "components": [
                 { "type": 10, "content": "### Vitrine de Verificação" },
-                { "type": 10, "content": `> Configure a aparência da mensagem pública e o cargo que será entregue.\n> **Status da Vitrine:** ${showcaseStatus}` }
-            ]
-        },
-        { "type": 14, "divider": true, "spacing": 1 },
-        {
-            "type": 9, "accessory": { "type": 2, "style": hasSecret ? 2 : 3, "label": hasSecret ? "Gerar Novo" : "Ativar API", "emoji": { "name": "✨" }, "custom_id": "aut_cf_oauth_start" },
-            "components": [
-                { "type": 10, "content": "### API Secret (Client Secret)" },
-                { "type": 10, "content": `> A senha para seu site/painel externo se comunicar com o bot.\n> **Status da API:** ${hasSecret ? '🟢 Ativo' : '🔴 Inativo'}` }
+                { "type": 10, "content": `> Configure a aparência da mensagem pública e o cargo.\n> **Status da Vitrine:** ${showcaseStatus}` }
             ]
         },
         { "type": 14, "divider": true, "spacing": 2 },
         
-        // Botão Voltar (para o menu de Registros)
+        // --- RODAPÉ: VOLTAR ---
         {
             "type": 1, "components": [
                 { "type": 2, "style": 2, "label": "Voltar", "emoji": { "name": "⬅️" }, "custom_id": "aut_reg_back_to_registros" }
@@ -54,7 +89,7 @@ function getOAuthHubMenu(settings) {
     return {
         type: 17,
         flags: V2_FLAG | EPHEMERAL_FLAG,
-        accent_color: 0x5865F2, // Blurple
+        accent_color: 0x10B981, // Verde Esmeralda (Indica Sucesso/Novo Sistema)
         components: v2_components
     };
 }
