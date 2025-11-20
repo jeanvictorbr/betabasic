@@ -1,15 +1,19 @@
 const axios = require('axios');
 
 module.exports = {
-    // Este handler captura qualquer botão que comece com "oauth_transfer_"
-    check: (id) => id.startsWith('oauth_transfer_'),
+    // O index.js usa startsWith, então definimos o prefixo aqui
+    customId: 'oauth_transfer_',
     
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
         
-        const targetId = interaction.customId.split('_')[2]; // oauth_transfer_12345 -> 12345
+        // Formato: oauth_transfer_USERID
+        const parts = interaction.customId.split('_');
+        const targetId = parts[2]; 
         const guildId = interaction.guild.id;
         const authUrl = process.env.AUTH_SYSTEM_URL;
+
+        if (!targetId) return interaction.editReply("Erro: ID do usuário não identificado.");
 
         try {
             // Chama a API de Join

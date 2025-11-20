@@ -1,27 +1,22 @@
-const manageMembers = require('./aut_oauth_manage_members.js'); // Importa a função do arquivo principal
-
-// Precisamos exportar a função loadMembersPage do outro arquivo para usar aqui.
-// Vá no arquivo aut_oauth_manage_members.js e no final adicione: 
-// module.exports.loadMembersPage = loadMembersPage; 
-// Mas como o módulo exports já foi definido, o ideal é que a função esteja em um util ou recarregada aqui.
-
-// SOLUÇÃO MAIS SIMPLES: Copiar a logica ou redirecionar.
-// Mas para facilitar, vou assumir que você vai editar o aut_oauth_manage_members.js
+const manageMembers = require('./aut_oauth_manage_members.js');
 
 module.exports = {
-    check: (id) => id.startsWith('oauth_page_'),
+    // O index.js usa startsWith, então definimos o prefixo aqui
+    customId: 'oauth_page_',
+    
     async execute(interaction) {
-        const page = parseInt(interaction.customId.split('_')[2]);
-        if (isNaN(page)) return; // Botão do meio (contador)
+        // Formato: oauth_page_NUMERO
+        const parts = interaction.customId.split('_');
+        const page = parseInt(parts[2]);
         
-        // Requer o arquivo original para chamar a função de carga
-        // Nota: Isso exige que o arquivo original exporte a função.
-        // Se der erro de "is not a function", me avise que fazemos um arquivo utils separado.
-        const manager = require('./aut_oauth_manage_members.js');
-        if (manager.loadMembersPage) {
-            await manager.loadMembersPage(interaction, page);
+        if (isNaN(page)) return interaction.deferUpdate(); // Botão do meio (contador)
+        
+        // Chama a função de carga do arquivo principal
+        // Se der erro aqui, verifique se você adicionou o 'module.exports.loadMembersPage' no outro arquivo
+        if (manageMembers.loadMembersPage) {
+            await manageMembers.loadMembersPage(interaction, page);
         } else {
-            await interaction.reply({ content: "Erro de navegação. Tente reabrir o menu.", ephemeral: true });
+            await interaction.reply({ content: "❌ Erro interno: Função de paginação não exportada.", ephemeral: true });
         }
     }
 };
