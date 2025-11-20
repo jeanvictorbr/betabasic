@@ -1,9 +1,7 @@
 // File: handlers/buttons/aut_oauth_manage_members.js
 const axios = require('axios');
-const { PermissionsBitField } = require('discord.js');
 
-// Configure seu ID aqui para ver o botão global
-const DEVELOPER_ID = process.env.OWNER_ID || '140867979578576916'; 
+const DEVELOPER_ID = process.env.OWNER_ID || '140867979578576916';
 
 module.exports = {
     customId: 'aut_oauth_manage_members',
@@ -13,38 +11,18 @@ module.exports = {
 };
 
 async function loadMembersPage(interaction, page, isGlobal = false) {
-    // Garante que a interação não expire
     if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
 
     const guildId = interaction.guild.id;
+    // Limpeza da URL do Auth System
     let authUrl = process.env.AUTH_SYSTEM_URL;
-
-    // Função Segura de Erro (V2 Compatible)
-    const sendError = async (msg) => {
-        await interaction.editReply({
-            content: "", 
-            embeds: [],
-            components: [
-                { "type": 10, "content": `### ❌ Erro\n> ${msg}` },
-                { "type": 1, "components": [{ "type": 2, "style": 2, "label": "Voltar", "emoji": { "name": "⬅️" }, "custom_id": "aut_reg_open_oauth_hub" }] }
-            ]
-        });
-    };
-
-    if (!authUrl) return sendError("URL do Auth System não configurada no .env");
-
-    // Limpeza de URL
+    if(!authUrl) return sendError(interaction, "URL AUTH_SYSTEM_URL não configurada.");
     authUrl = authUrl.trim().replace(/\/$/, '').replace('/auth/callback', '');
-    const apiUrl = `${authUrl}/api/users`;
 
     try {
-        const params = { 
-            page: page, 
-            limit: 5,
-            ...(isGlobal ? { all: 'true' } : { guild_id: guildId })
-        };
-
-        const response = await axios.get(apiUrl, { params });
+        const response = await axios.get(`${authUrl}/api/users`, {
+            params: { page, limit: 5, ...(isGlobal ? { all: 'true' } : { guild_id: guildId }) }
+        });
         const { users, total, totalPages } = response.data;
 
         const components = [];
@@ -52,74 +30,47 @@ async function loadMembersPage(interaction, page, isGlobal = false) {
 
         // 1. Cabeçalho
         components.push({ "type": 10, "content": `## ${title}` });
-        components.push({ "type": 10, "content": `> **Total:** ${total} membros | **Página:** ${page}/${totalPages || 1}` });
+        components.push({ "type": 10, "content": `> **Total:** ${total} membros verificados` });
         components.push({ "type": 14, "divider": true, "spacing": 2 });
 
-        // 2. Botões de Ação (Topo)
+        // 2. Botões de Ação do Painel
         const actionButtons = [];
-        
         if (!isGlobal) {
-            actionButtons.push({ 
-                "type": 2, "style": 3, // Green
-                "label": "Transferir em Massa", "emoji": { "name": "📦" }, 
-                "custom_id": "aut_oauth_mass_transfer_start" 
-            });
+            actionButtons.push({ "type": 2, "style": 3, "label": "Transferir em Massa", "emoji": { "name": "📦" }, "custom_id": "aut_oauth_mass_transfer_start" });
         }
-
-        // Permissão para ver Global
         if (interaction.user.id === DEVELOPER_ID || interaction.user.id === interaction.guild.ownerId) {
-            if (!isGlobal) {
-                actionButtons.push({ "type": 2, "style": 4, "label": "Ver Lista Global", "emoji": { "name": "🌎" }, "custom_id": "aut_oauth_global_view" });
-            } else {
-                actionButtons.push({ "type": 2, "style": 2, "label": "Voltar para Local", "emoji": { "name": "🏠" }, "custom_id": "aut_oauth_manage_members" });
-                // Botão de Massa Global
+            if (!isGlobal) actionButtons.push({ "type": 2, "style": 4, "label": "Ver Lista Global", "emoji": { "name": "🌎" }, "custom_id": "aut_oauth_global_view" });
+            else {
                 actionButtons.push({ "type": 2, "style": 3, "label": "Transferir Global", "emoji": { "name": "📦" }, "custom_id": "aut_oauth_mass_transfer_global_start" });
+                actionButtons.push({ "type": 2, "style": 2, "label": "Voltar Local", "emoji": { "name": "🏠" }, "custom_id": "aut_oauth_manage_members" });
             }
         }
+        if(actionButtons.length > 0) components.push({ "type": 1, "components": actionButtons });
+        components.push({ "type": 14, "divider": true, "spacing": 1 });
 
-        if (actionButtons.length > 0) {
-            components.push({ "type": 1, "components": actionButtons });
-            components.push({ "type": 14, "divider": true, "spacing": 1 });
-        }
-
-        // 3. Lista de Usuários
+        // 3. Lista de Usuários (CORREÇÃO AQUI)
         if (!users || users.length === 0) {
             components.push({ "type": 10, "content": "🔒 **Nenhum usuário encontrado.**" });
         } else {
             for (const user of users) {
-                let originText = '⚠️ Link Antigo/Outro';
-                if (user.origin_guild === guildId) originText = '✅ Este Servidor';
-                if (isGlobal) originText = `🆔 Server: ${user.origin_guild?.substring(0, 18) || '?'}`;
-
-                // Bloco do Usuário (Texto)
+                let originInfo = user.origin_guild === guildId ? '✅ Local' : (isGlobal ? `🆔 ${user.origin_guild?.slice(0,15)}...` : '⚠️ Outro');
+                
+                // A) Bloco de Informação (Sem accessory)
                 components.push({
-                    "type": 9, // Container V2
+                    "type": 9, 
                     "components": [
-                        { "type": 10, "content": `### 👤 ${user.username}` },
-                        { "type": 10, "content": `> **ID:** ${user.id} • ${originText}` }
+                        { "type": 10, "content": `### 👤 ${user.username}` }, 
+                        { "type": 10, "content": `> **ID:** ${user.id} • ${originInfo}` }
                     ]
                 });
-
-                // Bloco de Ações do Usuário (Botões)
+                
+                // B) Bloco de Botões (ActionRow separada)
+                // Isso resolve o erro components[5].accessory
                 components.push({
-                    "type": 1, // Action Row
+                    "type": 1, 
                     "components": [
-                        // Botão 1: Puxar (Abre Modal de Destino)
-                        { 
-                            "type": 2, 
-                            "style": 1, // Blurple
-                            "label": "Puxar", 
-                            "emoji": { "name": "🚀" }, 
-                            "custom_id": `oauth_ask_${user.id}` 
-                        },
-                        // Botão 2: Remover (Apaga do Banco)
-                        { 
-                            "type": 2, 
-                            "style": 4, // Red/Destructive
-                            "label": "Remover", 
-                            "emoji": { "name": "🗑️" }, 
-                            "custom_id": `oauth_remove_${user.id}` 
-                        }
+                        { "type": 2, "style": 1, "label": "Puxar", "emoji": { "name": "🚀" }, "custom_id": `oauth_ask_${user.id}` },
+                        { "type": 2, "style": 4, "label": "Remover", "emoji": { "name": "🗑️" }, "custom_id": `oauth_remove_${user.id}` }
                     ]
                 });
 
@@ -129,26 +80,27 @@ async function loadMembersPage(interaction, page, isGlobal = false) {
 
         // 4. Paginação
         const modePrefix = isGlobal ? 'oauth_global_page_' : 'oauth_page_';
-        
         components.push({
             "type": 1,
             "components": [
                 { "type": 2, "style": 2, "label": "◀", "custom_id": `${modePrefix}${page - 1}`, "disabled": page <= 1 },
-                { "type": 2, "style": 2, "label": `${page}/${totalPages || 1}`, "custom_id": "noop", "disabled": true },
-                { "type": 2, "style": 2, "label": "▶", "custom_id": `${modePrefix}${page + 1}`, "disabled": page >= (totalPages || 1) },
+                { "type": 2, "style": 2, "label": "▶", "custom_id": `${modePrefix}${page + 1}`, "disabled": page >= totalPages },
                 { "type": 2, "style": 2, "label": "Voltar", "emoji": { "name": "⬅️" }, "custom_id": "aut_reg_open_oauth_hub" }
             ]
         });
 
-        // Envia tudo limpo (sem embeds ou content antigos)
         await interaction.editReply({ components: components, embeds: [], content: "" });
 
     } catch (error) {
-        console.error('[Manage Members Error]', error);
-        let msg = "Erro ao carregar lista. Tente novamente.";
-        if (error.response) msg = `Erro da API: ${error.response.status} - ${error.response.statusText}`;
-        await sendError(msg);
+        console.error(error);
+        await sendError(interaction, "Erro ao carregar lista. Verifique o console.");
     }
+}
+
+async function sendError(interaction, msg) {
+    await interaction.editReply({
+        components: [{ "type": 10, "content": `### ❌ Erro\n> ${msg}` }]
+    });
 }
 
 module.exports.loadMembersPage = loadMembersPage;
