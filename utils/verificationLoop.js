@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
-const pool = require('../database'); // Puxando sua conexão do database.js
+// CORREÇÃO AQUI: Adicionei chaves { } para pegar a propriedade pool correta
+const { pool } = require('../database'); 
 
 async function startVerificationLoop(client) {
     console.log('[Verification Loop] Iniciado. Verificando novos usuários...');
@@ -11,6 +12,8 @@ async function startVerificationLoop(client) {
         db.release();
     } catch (e) { 
         console.error("[Verification Loop] Erro ao verificar coluna 'processed':", e.message); 
+        // Se der erro aqui dizendo que pool.connect não é função, 
+        // verifique se seu database.js exporta 'pool' ou 'client'.
     }
 
     // 2. O Loop (Roda a cada 15 segundos)
@@ -28,14 +31,12 @@ async function startVerificationLoop(client) {
                     // A. Verifica se o Bot está na Guilda
                     const guild = client.guilds.cache.get(origin_guild);
                     if (!guild) {
-                        // Bot não está na guilda ou guilda inválida, pula.
                         continue; 
                     }
 
                     // B. Pega a configuração do Cargo
                     const settingsRes = await db.query("SELECT cloudflow_verify_role_id FROM guild_settings WHERE guild_id = $1", [origin_guild]);
                     if (settingsRes.rows.length === 0 || !settingsRes.rows[0].cloudflow_verify_role_id) {
-                        // Guilda não configurou cargo, marca como processado pra não travar
                         await db.query("UPDATE users SET processed = TRUE WHERE id = $1", [id]);
                         continue;
                     }
@@ -46,8 +47,6 @@ async function startVerificationLoop(client) {
                     try {
                         member = await guild.members.fetch(id);
                     } catch (e) {
-                        // Usuário não está no servidor ainda (pode ter logado mas não entrado)
-                        // Não marcamos como processado ainda, tentamos de novo no próximo loop
                         continue; 
                     }
 
