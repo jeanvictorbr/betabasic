@@ -1,62 +1,78 @@
-// File: handlers/buttons/aut_oauth_manage_members.js
-const db = require('../../database.js');
-const { V2_FLAG, EPHEMERAL_FLAG } = require('../../utils/constants.js');
-const { getMemberManagementMenu } = require('../../ui/membros/mainMenu.js');
+const axios = require('axios');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 
 module.exports = {
     customId: 'aut_oauth_manage_members',
     async execute(interaction) {
-        
-        const guildId = interaction.guild.id;
-        const page = 0;
-        const scope = 'GUILD'; // O escopo inicial é a Guild atual
+        await loadMembersPage(interaction, 1);
+    }
+};
 
-        await interaction.deferUpdate({ flags: EPHEMERAL_FLAG });
+// Função auxiliar para carregar páginas (pode ser exportada se usar em outros botões de paginação)
+async function loadMembersPage(interaction, page) {
+    if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
 
-        try {
-            // CORREÇÃO: Usando a tabela 'cloudflow_verified_users'
-            const membersResult = await db.query(
-                `SELECT user_id 
-                 FROM cloudflow_verified_users
-                 WHERE guild_id = $1 
-                 ORDER BY verified_at ASC
-                 LIMIT 10 OFFSET $2`,
-                [guildId, page * 10]
-            );
+    const guildId = interaction.guild.id;
+    const authUrl = process.env.AUTH_SYSTEM_URL;
+    
+    if (!authUrl) return interaction.followUp({ content: "⚠️ URL do Auth System não configurada.", ephemeral: true });
 
-            // CORREÇÃO: Buscando usernames via API
-            const membersData = await Promise.all(membersResult.rows.map(async (row) => {
-                try {
-                    const user = await interaction.client.users.fetch(row.user_id);
-                    return { user_id: user.id, username: user.username };
-                } catch (e) {
-                    return { user_id: row.user_id, username: 'Usuário Desconhecido' };
-                }
-            }));
+    try {
+        // Busca usuarios na API do Auth System
+        const response = await axios.get(`${authUrl}/api/users`, {
+            params: { guild_id: guildId, page: page, limit: 10 }
+        });
 
-            // CORREÇÃO: Contando da tabela correta
-            const totalResult = await db.query(
-                'SELECT COUNT(*) FROM cloudflow_verified_users WHERE guild_id = $1',
-                [guildId]
-            );
+        const { users, total, totalPages } = response.data;
 
-            const total = parseInt(totalResult.rows[0].count, 10);
-            const isDev = interaction.user.id === process.env.DEV_ID;
-
-            const menu = getMemberManagementMenu(membersData, total, page, scope, isDev);
-            await interaction.editReply(menu);
-
-        } catch (error) {
-            console.error('Erro ao buscar membros verificados:', error);
-            // CORREÇÃO: Usando o catch V2 puro
-            await interaction.editReply({ 
-                type: 17, 
-                flags: V2_FLAG | EPHEMERAL_FLAG,
-                accent_color: 0xED4245, // Vermelho
-                components: [
-                    { "type": 10, "content": "❌ Ocorreu um erro ao buscar a lista de membros." }
-                ]
+        if (total === 0) {
+            return interaction.editReply({
+                content: "🚫 Nenhum membro verificado encontrado originário deste servidor.",
+                components: [], embeds: []
             });
         }
-    },
-};
+
+        // Filtra para não mostrar o próprio usuário que está mexendo (anti-self-transfer kkk)
+        const filteredUsers = users.filter(u => u.id !== interaction.user.id);
+        
+        const embed = new EmbedBuilder()
+            .setTitle(`👥 Gerenciamento de Membros (${total} Total)`)
+            .setDescription(`Lista de usuários que se verificaram através deste servidor.\nSelecione um usuário abaixo para **Forçar Entrada (Transferir)**.`)
+            .setFooter({ text: `Página ${page} de ${totalPages}` })
+            .setColor('#5865F2');
+
+        // Cria o menu de seleção com os usuários da página
+        const options = filteredUsers.map(user => ({
+            label: user.username,
+            description: `ID: ${user.id} - Verificado em: ${new Date(user.updated_at).toLocaleDateString()}`,
+            value: `transfer_${user.id}`,
+            emoji: '👤'
+        }));
+
+        const rows = [];
+        
+        if (options.length > 0) {
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId('oauth_select_user_transfer')
+                .setPlaceholder('Selecione um membro para puxar...')
+                .addOptions(options);
+            rows.push(new ActionRowBuilder().addComponents(selectMenu));
+        } else {
+            embed.setDescription("Nenhum usuário disponível nesta página (você foi filtrado).");
+        }
+
+        // Botões de Paginação
+        const navRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`oauth_page_${page - 1}`).setLabel('◀').setStyle(ButtonStyle.Secondary).setDisabled(page <= 1),
+            new ButtonBuilder().setCustomId('oauth_refresh_list').setLabel('🔄 Atualizar').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(`oauth_page_${page + 1}`).setLabel('▶').setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages)
+        );
+        rows.push(navRow);
+
+        await interaction.editReply({ embeds: [embed], components: rows });
+
+    } catch (error) {
+        console.error(error);
+        await interaction.editReply({ content: "❌ Erro ao conectar com o Banco de Dados de Auth.", components: [] });
+    }
+}
