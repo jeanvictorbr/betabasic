@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 module.exports = {
-    // O index.js usa startsWith, então definimos o prefixo aqui
+    // O SEGREDO: Definir o customId como o prefixo para o index.js achar
     customId: 'oauth_transfer_',
     
     async execute(interaction) {
@@ -9,28 +9,28 @@ module.exports = {
         
         // Formato: oauth_transfer_USERID
         const parts = interaction.customId.split('_');
+        // parts[0]=oauth, parts[1]=transfer, parts[2]=USERID
         const targetId = parts[2]; 
         const guildId = interaction.guild.id;
         const authUrl = process.env.AUTH_SYSTEM_URL;
 
-        if (!targetId) return interaction.editReply("Erro: ID do usuário não identificado.");
+        if (!targetId) return interaction.editReply("❌ Erro: ID do usuário não identificado no botão.");
 
         try {
-            // Chama a API de Join
             const response = await axios.post(`${authUrl}/api/join/${targetId}/${guildId}`);
             
             if (response.data.success) {
                 await interaction.editReply({ 
-                    content: `✅ **Sucesso!** O comando de entrada foi enviado para o usuário <@${targetId}>.` 
+                    content: `✅ **Sucesso!** O comando de entrada foi enviado para <@${targetId}>.` 
                 });
             } else {
                 await interaction.editReply({ 
-                    content: `⚠️ **Atenção:** O sistema tentou, mas o usuário não entrou. Ele pode já estar no servidor, ter banimento ou excedido o limite de servidores.` 
+                    content: `⚠️ **Falha:** O sistema tentou, mas não conseguiu. O usuário pode já estar no servidor, ter atingido o limite de guilds ou revogado o acesso.` 
                 });
             }
         } catch (error) {
             console.error(error);
-            await interaction.editReply({ content: `❌ Erro ao processar: ${error.response?.data?.msg || error.message}` });
+            await interaction.editReply({ content: `❌ Erro ao processar: ${error.message}` });
         }
     }
 };
