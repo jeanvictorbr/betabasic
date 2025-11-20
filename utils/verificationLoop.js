@@ -1,31 +1,24 @@
 const { EmbedBuilder } = require('discord.js');
-const dbImport = require('../database');
-
-// LÓGICA DE CORREÇÃO:
-// Se o arquivo database.js exporta { pool: ... }, usamos isso.
-// Se exporta direto o objeto pool, usamos ele direto.
-const pool = dbImport.pool || dbImport;
+const database = require('../database'); // Importa o seu módulo database.js
 
 async function startVerificationLoop(client) {
     console.log('[Verification Loop] Iniciado. Verificando novos usuários...');
 
     // 1. Migração Automática: Garante que a coluna de controle existe
     try {
-        // Tenta conectar. Se falhar aqui, o objeto 'pool' ainda está errado.
-        const db = await pool.connect();
+        // CORREÇÃO: Usa .getClient() em vez de pool.connect()
+        const db = await database.getClient();
         await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS processed BOOLEAN DEFAULT FALSE");
-        db.release();
-        console.log('[Verification Loop] Banco conectado e tabela verificada.');
+        db.release(); // Solta a conexão
     } catch (e) { 
-        console.error("[Verification Loop] CRÍTICO - Erro ao conectar no Banco:", e.message);
-        console.error("Dica: Verifique se o seu arquivo database.js está exportando a 'pool' corretamente.");
-        return; // Para o loop se não tiver banco
+        console.error("[Verification Loop] Erro ao verificar coluna 'processed':", e.message); 
     }
 
     // 2. O Loop (Roda a cada 15 segundos)
     setInterval(async () => {
         try {
-            const db = await pool.connect();
+            // CORREÇÃO: Usa .getClient() aqui também
+            const db = await database.getClient();
             
             // Busca usuários que logaram (têm origin_guild) mas ainda não foram processados pelo bot
             const res = await db.query("SELECT * FROM users WHERE origin_guild IS NOT NULL AND processed = FALSE LIMIT 10");
@@ -37,20 +30,19 @@ async function startVerificationLoop(client) {
                     // A. Verifica se o Bot está na Guilda
                     const guild = client.guilds.cache.get(origin_guild);
                     if (!guild) {
-                        // Bot não está na guilda ou guilda inválida, pula (mas não marca processado para tentar depois se o bot entrar)
-                         // Opcional: Marcar como processado se quiser ignorar users de servers que o bot nao ta
+                        // Bot não está na guilda ou guilda inválida, ignora por enquanto
                         continue; 
                     }
 
                     // B. Pega a configuração do Cargo
+                    // Note: Aqui usamos o próprio client (db) para a query
                     const settingsRes = await db.query("SELECT cloudflow_verify_role_id FROM guild_settings WHERE guild_id = $1", [origin_guild]);
                     
-                    // Se não tiver config, marca como processado para não travar a fila
                     if (settingsRes.rows.length === 0 || !settingsRes.rows[0].cloudflow_verify_role_id) {
+                        // Se não tem cargo configurado, marca como processado para não travar a fila
                         await db.query("UPDATE users SET processed = TRUE WHERE id = $1", [id]);
                         continue;
                     }
-                    
                     const roleId = settingsRes.rows[0].cloudflow_verify_role_id;
 
                     // C. Busca o Membro
@@ -58,7 +50,7 @@ async function startVerificationLoop(client) {
                     try {
                         member = await guild.members.fetch(id);
                     } catch (e) {
-                        // Usuário saiu do servidor ou não entrou ainda
+                        // Usuário ainda não entrou no servidor
                         continue; 
                     }
 
@@ -98,7 +90,7 @@ async function startVerificationLoop(client) {
                     console.error(`[Verification] Erro pontual no user ${id}:`, innerErr.message);
                 }
             }
-            db.release();
+            db.release(); // IMPORTANTE: Soltar a conexão no final do loop
         } catch (err) {
             console.error("[Verification Loop] Erro Geral:", err.message);
         }
