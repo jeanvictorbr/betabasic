@@ -1,5 +1,3 @@
-// Arquivo: handlers/buttons/store_cv_publish_start_.js
-const { ChannelType } = require('discord.js');
 const { V2_FLAG, EPHEMERAL_FLAG } = require('../../utils/constants');
 
 module.exports = {

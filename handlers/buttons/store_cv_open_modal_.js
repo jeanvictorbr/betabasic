@@ -1,11 +1,10 @@
-// Arquivo: handlers/buttons/store_cv_open_modal_.js
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 
 module.exports = {
-    customId: 'store_cv_set_', // Captura store_cv_set_title_, store_cv_set_image_, etc.
+    customId: 'store_cv_set_', 
     execute: async (interaction) => {
         const parts = interaction.customId.split('_');
-        const categoryId = parts.pop(); // O último é o ID
+        const categoryId = parts.pop(); 
         const action = parts[3]; // title, desc, image, color
 
         let modalTitle, inputLabel, inputId, inputStyle, placeholder;
@@ -52,7 +51,7 @@ module.exports = {
             .setLabel(inputLabel)
             .setStyle(inputStyle)
             .setPlaceholder(placeholder)
-            .setRequired(action !== 'image'); // Imagem pode ser opcional para remover
+            .setRequired(action !== 'image');
 
         const row = new ActionRowBuilder().addComponents(input);
         modal.addComponents(row);
