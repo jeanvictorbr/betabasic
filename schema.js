@@ -26,6 +26,15 @@ const schema = {
         created_at: { type: 'TIMESTAMPTZ', default: 'NOW()' },
         _unique: { type: 'UNIQUE', columns: ['created_by', 'template_name'] }
     },
+    // ... (outras tabelas)
+    store_stock_notifications: {
+        id: { type: 'SERIAL', primaryKey: true },
+        guild_id: { type: 'VARCHAR(255)', notNull: true },
+        user_id: { type: 'VARCHAR(255)', notNull: true },
+        product_id: { type: 'INTEGER', notNull: true },
+        created_at: { type: 'TIMESTAMPTZ', default: 'NOW()' },
+        _unique: { type: 'UNIQUE', columns: ['user_id', 'product_id'] }
+    },
 automations_announcements: {
 		announcement_id: { type: 'SERIAL', primaryKey: true },
 		guild_id: { type: 'VARCHAR(255)', notNull: true },
