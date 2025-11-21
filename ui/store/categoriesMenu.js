@@ -1,3 +1,4 @@
+// Arquivo: ui/store/categoriesMenu.js
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const ITEMS_PER_PAGE = 3;
@@ -10,30 +11,31 @@ module.exports = function generateCategoriesMenu(categories = [], page = 0) {
     const categoryComponents = paginatedCategories.length > 0
         ? paginatedCategories.flatMap(c => ([
             // Bloco de Informação (Type 9 = Section/List Item)
+            // CORREÇÃO: Adicionado o campo 'accessory' que é obrigatório para o Type 9
             {
                 type: 9,
+                accessory: { 
+                    type: 2, 
+                    style: 2, // Secondary
+                    label: "Gerenciar", 
+                    emoji: { name: "🛠️" }, 
+                    custom_id: `store_manage_category_products_${c.id}` 
+                },
                 components: [
                     { type: 10, content: `**📂 ${c.name}** (\`ID: ${c.id}\`)` },
                     { type: 10, content: `> ${c.description || 'Sem descrição.'}` }
                 ]
             },
-            // Linha de Botões para esta categoria (Type 1 = Action Row)
+            // Linha de Botões Adicionais (Type 1 = Action Row)
             {
                 type: 1,
                 components: [
                     { 
                         type: 2, 
-                        style: 2, // Secondary
-                        label: "Gerenciar Produtos", 
-                        emoji: { name: "🛠️" }, 
-                        custom_id: `store_manage_category_products_${c.id}` 
-                    },
-                    { 
-                        type: 2, 
                         style: 1, // Primary (Blurple)
                         label: "Configurar Vitrine", 
                         emoji: { name: "🎨" }, 
-                        custom_id: `store_manage_cat_visuals_${c.id}` // NOVO BOTÃO
+                        custom_id: `store_manage_cat_visuals_${c.id}`
                     }
                 ]
             },
