@@ -5,7 +5,8 @@ const updateStoreVitrine = require('../../utils/updateStoreVitrine');
 
 module.exports = {
     customId: 'store_cv_save_', // Captura todos os saves
-    run: async (client, interaction) => {
+    execute: async (interaction) => {
+        const client = interaction.client; // Obtém o client do interaction
         const parts = interaction.customId.split('_');
         const categoryId = parts.pop();
         const action = parts[3]; // title, desc, image, color

@@ -4,7 +4,7 @@ const { V2_FLAG, EPHEMERAL_FLAG } = require('../../utils/constants');
 
 module.exports = {
     customId: 'store_cv_publish_start_',
-    run: async (client, interaction) => {
+    execute: async (interaction) => {
         const categoryId = interaction.customId.split('_').pop();
 
         const response = {

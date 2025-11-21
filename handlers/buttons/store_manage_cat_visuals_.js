@@ -4,7 +4,7 @@ const categoryConfigMenu = require('../../ui/store/categoryConfigMenu');
 
 module.exports = {
     customId: 'store_manage_cat_visuals_', // ID Dinâmico (termina com _)
-    run: async (client, interaction) => {
+    execute: async (interaction) => {
         const categoryId = interaction.customId.split('_').pop();
 
         const result = await db.query('SELECT * FROM store_categories WHERE id = $1', [categoryId]);

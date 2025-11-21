@@ -4,7 +4,8 @@ const updateStoreVitrine = require('../../utils/updateStoreVitrine');
 
 module.exports = {
     customId: 'store_cv_sel_channel_',
-    run: async (client, interaction) => {
+    execute: async (interaction) => {
+        const client = interaction.client; // Obtém o client do interaction
         const categoryId = interaction.customId.split('_').pop();
         const channelId = interaction.values[0];
 

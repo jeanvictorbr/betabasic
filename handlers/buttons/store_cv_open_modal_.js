@@ -3,7 +3,7 @@ const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = req
 
 module.exports = {
     customId: 'store_cv_set_', // Captura store_cv_set_title_, store_cv_set_image_, etc.
-    run: async (client, interaction) => {
+    execute: async (interaction) => {
         const parts = interaction.customId.split('_');
         const categoryId = parts.pop(); // O último é o ID
         const action = parts[3]; // title, desc, image, color
