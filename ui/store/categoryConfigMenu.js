@@ -19,9 +19,16 @@ module.exports = function categoryConfigMenu(category) {
                 { type: 10, content: `> Personalize como esta categoria aparece para os clientes.` },
                 { type: 14, divider: true, spacing: 1 },
 
-                // Seção de Pré-visualização dos Dados Atuais
+                // Seção de Pré-visualização (CORREÇÃO AQUI: Adicionado 'accessory')
                 {
                     type: 9, // Lista Horizontal
+                    accessory: {
+                        type: 2, 
+                        style: 2, 
+                        label: "Recarregar", 
+                        emoji: { name: "🔄" },
+                        custom_id: `store_manage_cat_visuals_${catId}` // Recarrega o menu
+                    },
                     components: [
                         { type: 10, content: `**Título:** ${currentTitle}` },
                         { type: 10, content: `**Cor:** \`${currentColor}\`` },
@@ -38,7 +45,7 @@ module.exports = function categoryConfigMenu(category) {
                     components: [
                         {
                             type: 2, style: 2, label: "Editar Título", emoji: { name: "✏️" },
-                            custom_id: `store_cv_set_title_${catId}` // Chama o modal handler
+                            custom_id: `store_cv_set_title_${catId}`
                         },
                         {
                             type: 2, style: 2, label: "Editar Descrição", emoji: { name: "📝" },
@@ -74,7 +81,7 @@ module.exports = function categoryConfigMenu(category) {
                         {
                             type: 2, style: 2, // Grey
                             label: "Voltar", emoji: { name: "↩️" },
-                            custom_id: `open_store_menu` // Volta para categorias
+                            custom_id: `open_store_menu`
                         }
                     ]
                 }
