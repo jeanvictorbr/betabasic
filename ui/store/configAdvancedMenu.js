@@ -1,5 +1,4 @@
-// ui/store/configAdvancedMenu.js
-
+// File: ui/store/configAdvancedMenu.js
 module.exports = async function generateConfigAdvancedMenu(interaction, settings) {
     
     // Variáveis de Estado
@@ -12,7 +11,7 @@ module.exports = async function generateConfigAdvancedMenu(interaction, settings
 
     const publicLogChannel = settings.store_public_log_channel_id ? `<#${settings.store_public_log_channel_id}>` : '`Não definido`';
     
-    // Verifica status do Token MP para feedback visual (opcional, mas útil)
+    // Feedback visual do status do Token
     const mpStatus = settings.store_mp_token ? "✅ Ativo" : "⚠️ Inativo";
 
     return {
@@ -21,10 +20,10 @@ module.exports = async function generateConfigAdvancedMenu(interaction, settings
             { "type": 10, "content": "## ⚙️ Configurações Avançadas da Loja" },
             { "type": 10, "content": "> Gerencie opções de automação, pagamentos e recursos premium." },
             
-            // --- [ADICIONADO] SEÇÃO DE PAGAMENTOS (MERCADO PAGO) ---
+            // --- SEÇÃO DE PAGAMENTOS (MERCADO PAGO) ---
             { "type": 14, "divider": true, "spacing": 1 },
             { "type": 10, "content": "### 💳 Pagamentos Automáticos" },
-            { "type": 10, "content": `> Configure o Token do Mercado Pago para baixar as vendas automaticamente.\n> Status MP: ${mpStatus}` },
+            { "type": 10, "content": `> Configure o Token do Mercado Pago para processar pagamentos automaticamente via Pix.\n> **Status MP:** ${mpStatus}` },
             {
                 "type": 1,
                 "components": [
@@ -33,14 +32,7 @@ module.exports = async function generateConfigAdvancedMenu(interaction, settings
                         "style": 2, // Secondary (Cinza)
                         "label": "Configurar Token MP",
                         "emoji": { "name": "💳" },
-                        "custom_id": "store_set_mp_token" // <--- BOTAO RESTAURADO AQUI
-                    },
-                    {
-                        "type": 2,
-                        "style": 2,
-                        "label": "Definir Chave Pix",
-                        "emoji": { "name": "💠" },
-                        "custom_id": "store_set_pix_key"
+                        "custom_id": "store_set_mp_token" // Abre o modal existente
                     }
                 ]
             },
@@ -49,7 +41,7 @@ module.exports = async function generateConfigAdvancedMenu(interaction, settings
             // --- SEÇÃO DE LOG PÚBLICA ---
             { "type": 14, "divider": true, "spacing": 1 },
             { "type": 10, "content": "### 📣 Log Pública de Vendas" },
-            { "type": 10, "content": "> Envie uma mensagem bonita em um canal público sempre que uma compra for aprovada para gerar credibilidade." },
+            { "type": 10, "content": "> Envie uma mensagem bonita em um canal público sempre que uma compra for aprovada." },
             {
                 "type": 9, "accessory": { 
                     "type": 2, 
