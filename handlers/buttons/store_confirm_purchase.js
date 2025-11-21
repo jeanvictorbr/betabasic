@@ -9,6 +9,8 @@ const { createPixPayment } = require('../../utils/mercadoPago.js');
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// --- FUNÇÕES AUXILIARES ---
+
 async function createDirectPaymentCart(interaction, products, coupon) {
     // Limpa carrinhos antigos
     const oldCarts = await db.query('SELECT * FROM store_carts WHERE guild_id = $1 AND user_id = $2 AND (status = $3 OR status = $4)', [interaction.guild.id, interaction.user.id, 'open', 'payment']);
@@ -22,7 +24,7 @@ async function createDirectPaymentCart(interaction, products, coupon) {
     const category = await interaction.guild.channels.fetch(settings.store_category_id).catch(() => null);
     const channelName = `🛒-carrinho-${interaction.user.username.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20)}`;
     
-    // CORREÇÃO: Monta as permissões dinamicamente
+    // Monta permissões
     const permissionOverwrites = [
         { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel] } 
@@ -45,8 +47,6 @@ async function createDirectPaymentCart(interaction, products, coupon) {
     });
 
     await thread.members.add(interaction.user.id);
-    // Remove permissão do canal de texto para forçar uso da Thread (se desejado) ou mantém.
-    // await cartChannel.permissionOverwrites.delete(interaction.user.id); 
 
     let totalPrice = products.reduce((sum, p) => sum + parseFloat(p.price), 0);
     if (coupon) {
@@ -84,7 +84,6 @@ async function createOrUpdateStandardCart(interaction, products) {
         const category = await interaction.guild.channels.fetch(settings.store_category_id).catch(() => null);
         const channelName = `🛒-carrinho-${interaction.user.username.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20)}`;
         
-        // CORREÇÃO: Monta permissões dinamicamente para evitar erro se o cargo não existir
         const permissionOverwrites = [
             { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
             { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles] },
@@ -110,7 +109,6 @@ async function createOrUpdateStandardCart(interaction, products) {
     const productsInCart = updatedCart.products_json || [];
     const cartPanelPayload = generateCartPanel(updatedCart, productsInCart, settings, null, interaction);
 
-    // Tenta editar a mensagem do painel se ela existir e for recente
     const messagesInCart = await cartChannel.messages.fetch({ limit: 10 });
     const botPanelMessage = messagesInCart.find(m => m.author.id === interaction.client.user.id && m.embeds.length > 0 && m.embeds[0].title && m.embeds[0].title.includes('Carrinho de Compras'));
     
@@ -123,6 +121,8 @@ async function createOrUpdateStandardCart(interaction, products) {
     return cartChannel;
 }
 
+// --- HANDLER PRINCIPAL ---
+
 module.exports = {
     customId: 'store_confirm_purchase_products_',
     async execute(interaction) {
@@ -134,8 +134,9 @@ module.exports = {
         const settings = (await db.query('SELECT * FROM guild_settings WHERE guild_id = $1', [interaction.guild.id])).rows[0] || {};
         
         if (settings.store_premium_dm_flow_enabled) {
-            // ... Lógica Premium DM (mantida igual)
+            // FLUXO VIP (DM)
             const loadingEmbed = new EmbedBuilder().setColor('#5865F2').setAuthor({ name: "Estamos a preparar seu checkout VIP...", iconURL: "https://media.tenor.com/JwPW0tw69vAAAAAi/cargando-loading.gif" });
+            // Limpa a mensagem anterior imediatamente
             await interaction.update({ content: '', embeds: [loadingEmbed], components: [] });
             await delay(1500);
 
@@ -143,12 +144,8 @@ module.exports = {
             let coupon = couponId ? (await db.query('SELECT * FROM store_coupons WHERE id = $1', [couponId])).rows[0] : null;
 
             try {
-                const { cart } = await createDirectPaymentCart(interaction, products, coupon); 
-                // ... Resto da lógica premium ...
-                // (Omitido para brevidade, mas mantenha o código original do arquivo anterior aqui)
-                // Apenas certifique-se de fechar as chaves corretamente.
+                const { cart } = await createDirectPaymentCart(interaction, products, coupon);
                 
-                // --- RECOLOCANDO O RESTO DA LÓGICA PREMIUM PARA GARANTIR QUE FUNCIONE ---
                 if (settings.store_log_channel_id) {
                     const logChannel = await interaction.guild.channels.fetch(settings.store_log_channel_id).catch(() => null);
                     if (logChannel) {
@@ -172,8 +169,9 @@ module.exports = {
                     dmPayload = generatePaymentMessage(cart, settings, coupon);
                 }
                 await interaction.user.send(dmPayload);
+                
+                // Mensagem final no lugar do botão
                 await interaction.editReply({ content: '✅ **Checkout Iniciado!** Verifique as suas mensagens diretas (DM) para continuar.', embeds: [] });
-                // -----------------------------------------------------------------------
 
             } catch (error) {
                 console.error("Erro no fluxo de pagamento direto: ", error);
@@ -181,15 +179,27 @@ module.exports = {
             }
 
         } else {
-            // Fluxo Padrão (Criação de Canal)
-            await interaction.deferUpdate();
+            // FLUXO PADRÃO (Criação de Canal)
+            
+            // 1. Update Imediato: Remove a Embed azul e o botão de confirmar, mostrando um "Carregando"
+            await interaction.update({ 
+                content: '🔄 **Processando pedido...**', 
+                embeds: [], 
+                components: [] 
+            });
+
             try {
                 const products = (await db.query(`SELECT * FROM store_products WHERE id = ANY($1::int[])`, [productIds])).rows;
                 const cartChannel = await createOrUpdateStandardCart(interaction, products);
-                await interaction.followUp({ content: `✅ Produto(s) adicionado(s)! Confira o seu carrinho em ${cartChannel}`, ephemeral: true });
+                
+                // 2. EditReply: Substitui o "Carregando" pelo link final do carrinho
+                await interaction.editReply({ 
+                    content: `✅ **Sucesso!** Produto adicionado.\n🛒 **Vá para:** ${cartChannel}` 
+                });
+
             } catch (error) {
                 console.error("Erro ao criar carrinho padrão:", error);
-                await interaction.followUp({ content: '❌ Erro ao criar carrinho. Verifique as permissões do bot.', ephemeral: true });
+                await interaction.editReply({ content: '❌ Erro ao criar carrinho. Verifique as permissões do bot.' });
             }
         }
     }
