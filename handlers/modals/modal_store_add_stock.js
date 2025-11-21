@@ -1,12 +1,12 @@
-// Arquivo: handlers/modals/modal_store_add_stock.js
+// Crie em: handlers/modals/modal_store_add_stock.js
 const db = require('../../database.js');
 const generateStockMenu = require('../../ui/store/stockMenu.js');
-const updateStoreVitrine = require('../../utils/updateStoreVitrine.js');
+const updateStoreVitrine = require('../../utils/updateStoreVitrine.js'); // IMPORTA A FUNÇÃO
 const V2_FLAG = 1 << 15;
 const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
-    customId: 'modal_store_add_stock_', 
+    customId: 'modal_store_add_stock_', // Handler dinâmico
     async execute(interaction) {
         await interaction.deferUpdate();
         const productId = interaction.customId.split('_')[4];
@@ -37,7 +37,6 @@ module.exports = {
             );
 
             await client.query('COMMIT');
-
             // --- LÓGICA DE NOTIFICAÇÃO ---
             // Busca usuários esperando por este produto
             const notifications = await client.query('SELECT user_id FROM store_stock_notifications WHERE product_id = $1', [productId]);
@@ -71,19 +70,19 @@ module.exports = {
                 flags: V2_FLAG | EPHEMERAL_FLAG,
             });
 
-            await interaction.followUp({ 
-                content: `✅ ${items.length} item(ns) adicionado(s)! ${notifications.rows.length > 0 ? `\n🔔 **${notifications.rows.length} usuários foram notificados.**` : ''}`, 
-                ephemeral: true 
-            });
+            await interaction.followUp({ content: `✅ ${items.length} item(ns) adicionado(s) ao estoque com sucesso!`, ephemeral: true });
             
+            // ATUALIZA A VITRINE DA CATEGORIA ESPECÍFICA
             if (product && product.category_id) {
                 await updateStoreVitrine(interaction.client, interaction.guild.id, product.category_id);
             }
+            // CHAMA A FUNÇÃO PARA ATUALIZAR A VITRINE
+            await updateStoreVitrine(interaction.client, interaction.guild.id);
 
         } catch (error) {
             await client.query('ROLLBACK');
-            console.error('[Store] Erro ao adicionar estoque:', error);
-            await interaction.followUp({ content: '❌ Ocorreu um erro ao adicionar os itens.', ephemeral: true });
+            console.error('[Store] Erro ao adicionar estoque real:', error);
+            await interaction.followUp({ content: '❌ Ocorreu um erro ao adicionar os itens ao estoque.', ephemeral: true });
         } finally {
             client.release();
         }
