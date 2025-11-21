@@ -48,6 +48,10 @@ module.exports = {
 
             await interaction.followUp({ content: `✅ ${items.length} item(ns) adicionado(s) ao estoque com sucesso!`, ephemeral: true });
             
+            // ATUALIZA A VITRINE DA CATEGORIA ESPECÍFICA
+            if (product && product.category_id) {
+                await updateStoreVitrine(interaction.client, interaction.guild.id, product.category_id);
+            }
             // CHAMA A FUNÇÃO PARA ATUALIZAR A VITRINE
             await updateStoreVitrine(interaction.client, interaction.guild.id);
 

@@ -45,7 +45,10 @@ module.exports = {
             });
 
             await interaction.followUp({ content: `✅ Estoque atualizado com sucesso para ${newItems.length} item(ns)!`, ephemeral: true });
-            
+            // ATUALIZA A VITRINE DA CATEGORIA ESPECÍFICA
+            if (product && product.category_id) {
+                await updateStoreVitrine(interaction.client, interaction.guild.id, product.category_id);
+            }
             await updateStoreVitrine(interaction.client, interaction.guild.id);
 
         } catch (error) {
