@@ -1,85 +1,96 @@
 // Arquivo: utils/updateStoreVitrine.js
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
 const db = require('../database');
-const { ActionRowBuilder, StringSelectMenuBuilder, EmbedBuilder } = require('discord.js'); // Usando builders aqui pois é utilitário de envio de msg, não UI de resposta
 
 /**
- * Atualiza a vitrine da loja.
- * @param {Object} client - Cliente do Discord.
- * @param {string} guildId - ID do servidor.
- * @param {string} [targetCategoryId=null] - Se fornecido, atualiza apenas a vitrine dessa categoria específica.
+ * Atualiza ou cria a vitrine de uma categoria específica.
+ * @param {import('discord.js').Client} client 
+ * @param {string} guildId 
+ * @param {string|number} categoryId 
  */
-module.exports = async (client, guildId, targetCategoryId = null) => {
+async function updateStoreVitrine(client, guildId, categoryId) {
     try {
-        const guild = await client.guilds.fetch(guildId).catch(() => null);
-        if (!guild) return;
+        // 1. Buscar dados da Categoria
+        const catResult = await db.query('SELECT * FROM store_categories WHERE id = $1', [categoryId]);
+        if (catResult.rows.length === 0) return;
+        const category = catResult.rows[0];
 
-        // --- MODO 1: Vitrine de Categoria Específica ---
-        if (targetCategoryId) {
-            const categoryResult = await db.query('SELECT * FROM store_categories WHERE id = $1 AND guild_id = $2', [targetCategoryId, guildId]);
-            if (categoryResult.rows.length === 0) return;
-            const catData = categoryResult.rows[0];
+        // 2. Validações: Se não tiver canal/mensagem configurados, para.
+        if (!category.vitrine_channel_id || !category.vitrine_message_id) return;
 
-            if (!catData.vitrine_channel_id || !catData.vitrine_message_id) return; // Não está configurada para ser postada
+        // 3. Buscar Produtos Ativos da Categoria
+        const prodResult = await db.query(
+            'SELECT * FROM store_products WHERE category_id = $1 AND is_enabled = true ORDER BY id ASC',
+            [categoryId]
+        );
+        const products = prodResult.rows;
 
-            const channel = await guild.channels.fetch(catData.vitrine_channel_id).catch(() => null);
-            if (!channel) return;
-
-            // Pega produtos APENAS desta categoria
-            const productsResult = await db.query('SELECT * FROM store_products WHERE guild_id = $1 AND category_id = $2', [guildId, targetCategoryId]);
-            const products = productsResult.rows;
-
-            // Monta a Embed Personalizada
-            const embed = new EmbedBuilder()
-                .setTitle(catData.vitrine_title || catData.name)
-                .setDescription(catData.vitrine_desc || `Produtos disponíveis na categoria **${catData.name}**.`)
-                .setColor(catData.vitrine_color || '#2b2d31');
-
-            if (catData.vitrine_image) embed.setImage(catData.vitrine_image);
-            if (catData.vitrine_thumbnail) embed.setThumbnail(catData.vitrine_thumbnail);
-
-            // Monta o Select Menu
-            const select = new StringSelectMenuBuilder()
-                .setCustomId('store_buy_product') // Mantém o ID de compra original para compatibilidade
-                .setPlaceholder('Selecione um produto para comprar...');
-
-            if (products.length === 0) {
-                select.addOptions([{ label: 'Sem estoque no momento', value: 'empty', emoji: '🚫' }]);
-                select.setDisabled(true);
-                embed.setFooter({ text: 'Nenhum produto disponível nesta categoria.' });
-            } else {
-                const options = products.map(p => ({
-                    label: `${p.name} - R$ ${parseFloat(p.price).toFixed(2)}`,
-                    description: p.description ? p.description.substring(0, 95) : 'Sem descrição',
-                    value: p.id,
-                    emoji: p.emoji || '🛒'
-                })).slice(0, 25); // Limite do Discord
-                select.addOptions(options);
-            }
-
-            const row = new ActionRowBuilder().addComponents(select);
-
-            // Edita a mensagem
-            await channel.messages.edit(catData.vitrine_message_id, {
-                content: null,
-                embeds: [embed],
-                components: [row]
-            }).catch(async (err) => {
-                // Se a mensagem foi deletada, reseta no banco
-                if (err.code === 10008) {
-                    await db.query('UPDATE store_categories SET vitrine_message_id = NULL WHERE id = $1', [targetCategoryId]);
-                }
-            });
-
+        // 4. Buscar o Canal e a Mensagem no Discord
+        const channel = await client.channels.fetch(category.vitrine_channel_id).catch(() => null);
+        if (!channel) {
+            console.warn(`[Vitrine] Canal ${category.vitrine_channel_id} não encontrado.`);
             return;
         }
 
-        // --- MODO 2: Vitrine Global (Legado/Geral) ---
-        // (Mantém a lógica antiga se targetCategoryId for null)
-        // ... Logica original de pegar settings globais ...
-        // Para economizar espaço, assumo que você manterá o código original abaixo do "if (targetCategoryId)"
-        // Se precisar que eu reescreva a parte global também, me avise. 
-        
+        const message = await channel.messages.fetch(category.vitrine_message_id).catch(() => null);
+        if (!message) {
+            console.warn(`[Vitrine] Mensagem ${category.vitrine_message_id} não encontrada.`);
+            return;
+        }
+
+        // 5. Construir o Embed Visual
+        const embed = new EmbedBuilder()
+            .setTitle(category.vitrine_title || `📂 ${category.name}`)
+            .setDescription(category.vitrine_desc || 'Explore nossos produtos abaixo e selecione para comprar.')
+            .setColor(category.vitrine_color || '#2b2d31')
+            .setFooter({ text: `Categoria ID: ${categoryId} • StoreFlow` });
+
+        // Adiciona imagem se existir
+        if (category.vitrine_image && category.vitrine_image.startsWith('http')) {
+            embed.setImage(category.vitrine_image);
+        }
+        // Adiciona thumbnail se existir
+        if (category.vitrine_thumbnail && category.vitrine_thumbnail.startsWith('http')) {
+            embed.setThumbnail(category.vitrine_thumbnail);
+        }
+
+        // 6. Construir o Menu de Seleção (Produtos)
+        const components = [];
+
+        if (products.length > 0) {
+            // Discord limita a 25 opções
+            const options = products.slice(0, 25).map(p => {
+                const price = parseFloat(p.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                return {
+                    label: p.name.substring(0, 100),
+                    description: `${price} - ${p.description ? p.description.substring(0, 50) : 'Sem descrição'}`,
+                    value: `store_prod_${p.id}`, // Value que o handler vai ler
+                    emoji: '🛒'
+                };
+            });
+
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId(`store_vitrine_select_${categoryId}`) // ID do Select
+                .setPlaceholder('👇 Selecione um produto para adicionar ao carrinho...')
+                .addOptions(options);
+
+            components.push(new ActionRowBuilder().addComponents(selectMenu));
+        } else {
+            embed.addFields({ name: '🚫 Estoque', value: 'Nenhum produto disponível nesta categoria no momento.' });
+        }
+
+        // 7. Editar a Mensagem (Substitui o "Inicializando...")
+        await message.edit({
+            content: null, // Remove o texto simples
+            embeds: [embed],
+            components: components
+        });
+
+        console.log(`[Vitrine] Vitrine da categoria ${category.name} (${categoryId}) atualizada com sucesso.`);
+
     } catch (error) {
-        console.error(`[Vitrine Update Error] ${error}`);
+        console.error(`[Vitrine] Erro crítico ao atualizar categoria ${categoryId}:`, error);
     }
-};
+}
+
+module.exports = updateStoreVitrine;
