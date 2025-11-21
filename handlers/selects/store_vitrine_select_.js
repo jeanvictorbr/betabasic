@@ -10,21 +10,35 @@ module.exports = {
         const rawValue = interaction.values[0];
         const productId = rawValue.replace('prod_', '');
 
-        // 1. Busca o produto
+        // 1. Busca o produto selecionado para validar e mostrar info
         const productResult = await db.query('SELECT * FROM store_products WHERE id = $1', [productId]);
+        
         if (productResult.rows.length === 0) {
-            return interaction.reply({ content: '❌ Produto não encontrado.', flags: EPHEMERAL_FLAG });
+            return interaction.reply({ 
+                content: '❌ Este produto não existe mais ou foi removido.', 
+                flags: EPHEMERAL_FLAG 
+            });
         }
+
         const product = productResult.rows[0];
 
-        // 2. PREPARAÇÃO DO RESET (Reconstrução do Menu)
-        // Fazemos isso ANTES de checar o estoque para poder destravar a interface em qualquer caso
+        // Validação de Estoque
+        if (product.stock !== -1 && product.stock <= 0 && product.stock_type !== 'GHOST') {
+            return interaction.reply({
+                content: '🚫 **Produto Esgotado!** Infelizmente acabaram as unidades deste item.',
+                flags: EPHEMERAL_FLAG
+            });
+        }
+
+        // 2. PREPARAÇÃO PARA O RESET DO MENU (INTERACTION.UPDATE)
+        // Precisamos reconstruir o menu da categoria para "limpar" a seleção do usuário na UI
         const productsResult = await db.query(
             'SELECT * FROM store_products WHERE category_id = $1 AND is_enabled = true ORDER BY id ASC',
             [categoryId]
         );
         const catProducts = productsResult.rows;
         
+        // Reconstrói o componente SelectMenu (igual ao updateStoreVitrine.js)
         const components = [];
         if (catProducts.length > 0) {
             const select = new StringSelectMenuBuilder()
@@ -54,30 +68,14 @@ module.exports = {
             components.push(new ActionRowBuilder().addComponents(select));
         }
 
-        // 3. EXECUTA O UPDATE (Reseta o menu para tirar o "loading" ou seleção travada)
+        // 3. EXECUTA O UPDATE (Reseta o menu na mensagem original)
+        // Nota: Mantemos os embeds originais da mensagem (interaction.message.embeds)
         await interaction.update({
             embeds: interaction.message.embeds,
             components: components
         });
 
-        // 4. VERIFICAÇÃO DE ESTOQUE
-        if (product.stock !== -1 && product.stock <= 0 && product.stock_type !== 'GHOST') {
-            // Botão de Notificação
-            const notifyBtn = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`store_notify_stock_${product.id}`)
-                    .setLabel('🔔 Avise-me quando chegar')
-                    .setStyle(ButtonStyle.Primary)
-            );
-
-            return interaction.followUp({
-                content: `🚫 **Produto Esgotado!**\nInfelizmente as unidades de **${product.name}** acabaram.\n\nClique no botão abaixo para receber uma mensagem na sua DM assim que o estoque for reposto.`,
-                components: [notifyBtn],
-                flags: EPHEMERAL_FLAG
-            });
-        }
-
-        // 5. SE TIVER ESTOQUE, SEGUE O FLUXO DE COMPRA
+        // 4. ENVIA O CARRINHO PROVISÓRIO (FollowUp Efêmero)
         const priceFormatted = parseFloat(product.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
         const cartEmbed = {
