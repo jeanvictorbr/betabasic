@@ -34,6 +34,10 @@ async function approvePurchase(client, guildId, cartChannelId, staffMember = nul
         let deliveredRoles = []; // Para DMs de 'role'
         let productDetailsForLog = []; // Para o log final
 
+        // --- NOVA ADIÇÃO: Rastrear categorias afetadas para atualizar vitrine ---
+        const affectedCategories = new Set();
+        // -----------------------------------------------------------------------
+
         // --- INÍCIO DA LÓGICA DE DURAÇÃO (PARA O CARGO DE CLIENTE) ---
         let maxDuration = 0;
         let hasPermanentProductRole = false;
@@ -51,6 +55,9 @@ async function approvePurchase(client, guildId, cartChannelId, staffMember = nul
                 productDetailsForLog.push({ name: `[Produto Deletado ID: ${productId}]`, quantity: quantity });
                 continue;
             }
+
+            // Adiciona categoria à lista de atualização
+            if (product.category_id) affectedCategories.add(product.category_id);
 
             productDetailsForLog.push({ name: product.name, quantity: quantity, price: product.price });
 
@@ -180,12 +187,21 @@ async function approvePurchase(client, guildId, cartChannelId, staffMember = nul
 
         await client_db.query('COMMIT');
 
-        // 8. Atualiza a vitrine após a compra ser confirmada
-        try {
-            await updateStoreVitrine(client, guildId);
-        } catch (vitrineError) {
-            console.error(`[ApprovePurchase] Falha ao atualizar a vitrine para a guild ${guildId}:`, vitrineError);
-            if (logChannel) await logChannel.send(`⚠️ **Alerta:** A venda foi concluída, mas falhei ao atualizar a vitrine principal. Pode ser necessário publicá-la novamente.`);
+        // 8. ATUALIZAR AS VITRINES DAS CATEGORIAS AFETADAS
+        // Agora percorremos o Set de IDs e atualizamos apenas as necessárias
+        if (affectedCategories.size > 0) {
+            for (const catId of affectedCategories) {
+                try {
+                    await updateStoreVitrine(client, guildId, catId);
+                } catch (vitrineError) {
+                    console.error(`[ApprovePurchase] Falha ao atualizar a vitrine da categoria ${catId}:`, vitrineError);
+                }
+            }
+        } else {
+            // Fallback para vitrine global se nenhuma categoria específica for detectada (compatibilidade)
+            try {
+                await updateStoreVitrine(client, guildId);
+            } catch (e) {}
         }
 
         return { success: true };
