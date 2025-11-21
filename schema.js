@@ -282,7 +282,7 @@ automations_announcements: {
         vitrine_desc: { type: 'TEXT' },
         vitrine_image: { type: 'TEXT' },
         vitrine_thumbnail: { type: 'TEXT' },
-        vitrine_color: { type: 'VARCHAR(20)', default: "'#2b2d31'" },
+        vitrine_color: { type: 'VARCHAR(20)', default: '#2b2d31' },
         vitrine_channel_id: { type: 'VARCHAR(255)' },
         vitrine_message_id: { type: 'VARCHAR(255)' },
     },
