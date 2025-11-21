@@ -1,64 +1,78 @@
-// Substitua completamente o conteúdo de: ui/store/paymentMenu.js
+// File: ui/store/paymentMenu.js
+// CORRIGIDO: Adicionado o botão de Mercado Pago (Pix Automático)
 
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const hasFeature = require('../../utils/featureCheck.js');
-// Importa o utilitário necessário
-const { getCartSummary } = require('./dmConversationalFlow.js'); // << IMPORT CORRETA
-
-// CRÍTICO: Função AGORA recebe a guilda para checagem de feature e lógica de sumário.
-module.exports = async function generatePaymentMenu(cart, settings, coupon, guild) {
-    // Adicionamos uma checagem de segurança, embora o handler de chamada deva garantir isso.
-    if (!guild || !guild.id) {
-        throw new Error("Objeto Guild inválido passado para generatePaymentMenu.");
-    }
+module.exports = function generatePaymentMenu(cart, settings) {
+    const components = [];
     
-    // Agora usa guild.id (e não guild, que pode ser undefined se o handler for chamado incorretamente)
-    const hasAutomation = await hasFeature(guild.id, 'STORE_AUTOMATION'); 
-    
-    const manualPayEnabled = settings.store_pix_key ? true : false;
-    
-    // Usa a função importada corretamente
-    const { priceString } = getCartSummary(cart, coupon); 
+    // Verifica se há um token configurado (mesmo que seja teste)
+    const hasMpToken = !!settings.store_mp_token; 
+    // Verifica se há chave pix manual
+    const hasPixKey = !!settings.store_pix_key;
 
-    const embed = new EmbedBuilder()
-        .setColor('#F1C40F')
-        .setTitle('💰 Finalizar Compra: Seleção de Pagamento')
-        .setDescription(`**Total a Pagar:** ${priceString}`)
-        .setFooter({ text: 'Selecione uma opção de pagamento abaixo.'})
-        .setTimestamp();
-        
-    const buttons = new ActionRowBuilder();
+    // Seção de Resumo
+    components.push({
+        type: 10,
+        content: `## 🛒 Caixa - Pagamento\n> **Total a Pagar:** R$ ${cart.total_price}\n> Escolha sua forma de pagamento abaixo.`
+    });
 
-    // Opção de Pagamento Automático (Mercado Pago)
-    if (hasAutomation && settings.store_mp_token) {
-        embed.addFields({ name: 'Opção 1: PIX Automático (Recomendado)', value: 'Pague e receba instantaneamente.' });
-        buttons.addComponents(
-            new ButtonBuilder()
-                .setCustomId('store_pay_mercado_pago') // Formato curto
-                .setLabel('PIX Automático')
-                .setStyle(ButtonStyle.Success)
-                .setDisabled(false)
-        );
+    const paymentButtons = [];
+
+    // --- LÓGICA DO BOTAO MP ---
+    if (hasMpToken) {
+        paymentButtons.push({
+            type: 2,
+            style: 3, // Success (Verde)
+            label: "Pagar com Pix (Automático)",
+            emoji: { name: "💠" },
+            custom_id: "store_pay_mercado_pago" // Este ID chama o handler que gera o QR Code
+        });
+    } else {
+        // Opcional: Mostrar aviso se não houver método
+        // paymentButtons.push({ type: 2, style: 2, label: "Pix Automático (Indisponível)", disabled: true, custom_id: "disabled_mp" });
     }
 
-    // Opção de Pagamento Manual (PIX com Comprovante)
-    if (manualPayEnabled) {
-        embed.addFields({ name: 'Opção 2: PIX Manual', value: 'Pague e aguarde a aprovação da Staff.' });
-        buttons.addComponents(
-            new ButtonBuilder()
-                .setCustomId('store_pay_manual')
-                .setLabel('PIX Manual')
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(false)
-        );
+    if (hasPixKey) {
+        paymentButtons.push({
+            type: 2,
+            style: 1, // Primary (Azul)
+            label: "Pix Manual (Comprovante)",
+            emoji: { name: "📄" },
+            custom_id: "store_pay_manual"
+        });
     }
-    
-    buttons.addComponents(
-        new ButtonBuilder()
-            .setCustomId('store_cart_cancel')
-            .setLabel('Cancelar Compra')
-            .setStyle(ButtonStyle.Danger)
-    );
 
-    return { embeds: [embed], components: [buttons] };
+    // Botão de Cancelar sempre presente
+    paymentButtons.push({
+        type: 2,
+        style: 4, // Danger (Vermelho)
+        label: "Cancelar Compra",
+        custom_id: "store_cart_cancel"
+    });
+
+    // Adiciona a linha de botões
+    components.push({
+        type: 1,
+        components: paymentButtons
+    });
+
+    // Adiciona botão de voltar
+    components.push({
+        type: 1,
+        components: [
+            {
+                type: 2,
+                style: 2,
+                label: "Voltar ao Carrinho",
+                emoji: { name: "↩️" },
+                custom_id: "store_payment_return_to_cart"
+            }
+        ]
+    });
+
+    return [
+        {
+            type: 17, 
+            components: components
+        }
+    ];
 };
