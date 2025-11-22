@@ -6,27 +6,66 @@ const { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('
 module.exports = {
     customId: 'store_pay_mercado_pago',
     async execute(interaction) {
-        // Usa deferReply EPHEMERAL para gerar o QR Code sem fechar o menu
+        // Usa deferReply EPHEMERAL para não expor dados
         await interaction.deferReply({ ephemeral: true });
 
-        const cartId = interaction.channel.id;
-        const cart = (await db.query('SELECT * FROM store_carts WHERE channel_id = $1', [cartId])).rows[0];
-        
-        if (!cart) return interaction.editReply("❌ Carrinho não encontrado.");
-
-        const products = cart.products_json || [];
-
         try {
-            // Chama a função do utils/mercadoPago.js
+            const cartId = interaction.channel.id;
+            
+            // 1. Busca dados vitais
+            const cartQuery = await db.query('SELECT * FROM store_carts WHERE channel_id = $1', [cartId]);
+            const cart = cartQuery.rows[0];
+            
+            if (!cart) return interaction.editReply("❌ Carrinho não encontrado.");
+
+            // 2. RECÁLCULO DE SEGURANÇA (A CORREÇÃO REAL)
+            // Calcula o preço agora mesmo para garantir que não seja NULL
+            const products = cart.products_json || [];
+            let calculatedTotal = 0;
+            
+            // Soma os produtos
+            products.forEach(p => {
+                calculatedTotal += parseFloat(p.price) * (p.quantity || 1);
+            });
+
+            // Aplica cupom se existir
+            let couponCode = "Nenhum";
+            if (cart.coupon_id) {
+                const couponRes = await db.query('SELECT * FROM store_coupons WHERE id = $1', [cart.coupon_id]);
+                const coupon = couponRes.rows[0];
+                if (coupon) {
+                    const discount = calculatedTotal * (coupon.discount_percent / 100);
+                    calculatedTotal -= discount;
+                    couponCode = coupon.code;
+                }
+            }
+
+            // Arredonda para 2 casas decimais
+            calculatedTotal = parseFloat(calculatedTotal.toFixed(2));
+
+            // 3. SALVA O PREÇO NO BANCO (CRÍTICO)
+            // Isso impede o erro "Valor Inválido" atualizando o DB antes de chamar o MP
+            await db.query('UPDATE store_carts SET total_price = $1 WHERE channel_id = $2', [calculatedTotal, cartId]);
+            
+            // Atualiza o objeto cart local também para passar para a função
+            cart.total_price = calculatedTotal;
+
+            console.log(`[Debug Pagamento] Total Calculado: ${calculatedTotal} | Produtos: ${products.length}`);
+
+            if (calculatedTotal <= 0) {
+                return interaction.editReply("⚠️ O valor total do carrinho é R$ 0,00 ou inválido. Adicione produtos antes de pagar.");
+            }
+
+            // 4. Gera o Pagamento
             const paymentData = await createPixPayment(interaction.guild.id, cart, products);
             
             const qrCodeBuffer = Buffer.from(paymentData.qrCode, 'base64');
             const attachmentName = `qrcode-pix.png`;
 
             const embed = new EmbedBuilder()
-                .setColor('#2ECC71') // Verde Mercado Pago
+                .setColor('#2ECC71') 
                 .setTitle('💠 Pagamento Pix Gerado!')
-                .setDescription(`**Valor:** R$ ${cart.total_price}\n\n1️⃣ Abra o app do seu banco.\n2️⃣ Escolha **Pix** > **Ler QR Code**.\n3️⃣ Aponte a câmera ou use o código abaixo.`)
+                .setDescription(`**Valor Final:** R$ ${calculatedTotal.toFixed(2).replace('.', ',')}\n**Cupom:** ${couponCode}\n\n1️⃣ Abra o app do seu banco.\n2️⃣ Escolha **Pix** > **Ler QR Code**.\n3️⃣ Aponte a câmera ou use o código abaixo.`)
                 .addFields(
                     { name: '👇 Pix Copia e Cola', value: `\`\`\`${paymentData.qrCodeCopy}\`\`\`` }
                 )
@@ -36,7 +75,7 @@ module.exports = {
                 
             const actionRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`store_verify_mp_payment`) // Handler de verificação
+                    .setCustomId(`store_verify_mp_payment`)
                     .setLabel('Já paguei! Verificar')
                     .setStyle(ButtonStyle.Success)
                     .setEmoji('✔️')
@@ -51,7 +90,7 @@ module.exports = {
         } catch (error) {
             console.error('[Store] Erro MP:', error);
             await interaction.editReply({ 
-                content: `❌ **Erro ao gerar Pix:** ${error.message || 'Verifique se o Token MP é válido no painel avançado.'}`
+                content: `❌ **Erro ao gerar Pix:** ${error.message}`
             });
         }
     }
