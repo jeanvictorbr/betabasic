@@ -17,7 +17,7 @@ module.exports = async function generateStoreMenu(interaction, settings) {
         {
             "type": 17, "accent_color": 15105570,
             "components": [
-                { "type": 10, "content": `## 🏪 StoreFlow V3 - Painel de Controle` },
+                { "type": 10, "content": `## 🏪 StoreFlow V4 - Painel de Controle` },
                 { "type": 10, "content": `> Status da Loja: **${statusText}**` },
                 { "type": 14, "divider": true, "spacing": 1 },
                 {
