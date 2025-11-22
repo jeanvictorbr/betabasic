@@ -7,26 +7,32 @@ module.exports = {
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
 
-        const categoryId = interaction.customId.split('_').pop(); // ID da categoria atual
-        const productId = interaction.values[0]; // ID do produto selecionado
+        // O ID da categoria está no final do CustomID (ex: ..._15)
+        const categoryId = interaction.customId.split('_').pop();
+        // O ID do produto selecionado está no valor do select menu
+        const productId = interaction.values[0];
 
         try {
-            // --- CORREÇÃO AQUI ---
-            // Antes: DELETE FROM store_products WHERE id = $1 (Isso apagava o produto!)
-            // Agora: Apenas removemos a categoria dele (NULL)
+            // 1. CORREÇÃO CRÍTICA: Alterado de DELETE para UPDATE
+            // Apenas define category_id como NULL, mantendo o produto salvo.
             await db.query(
                 'UPDATE store_products SET category_id = NULL WHERE id = $1',
                 [productId]
             );
 
-            // Atualiza a vitrine da categoria afetada (para remover o produto visualmente dela)
-            await updateStoreVitrine(interaction.client, interaction.guild.id, categoryId);
+            // 2. ATUALIZAÇÃO DA VITRINE EM TEMPO REAL
+            // Atualiza a vitrine da categoria afetada para o produto sumir de lá
+            try {
+                await updateStoreVitrine(interaction.client, interaction.guild.id, categoryId);
+            } catch (vitrineError) {
+                console.error('Erro ao atualizar vitrine (Remoção):', vitrineError);
+            }
 
-            await interaction.editReply(`✅ Produto removido da categoria com sucesso! (O produto continua existindo na loja, sem categoria).`);
+            await interaction.editReply(`✅ Produto removido da categoria com sucesso! (Ele continua no seu estoque geral).`);
 
         } catch (error) {
             console.error(error);
-            await interaction.editReply('❌ Erro ao remover produto da categoria.');
+            await interaction.editReply('❌ Erro ao desvincular produto da categoria.');
         }
     }
 };
