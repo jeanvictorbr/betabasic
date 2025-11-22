@@ -1,38 +1,50 @@
-// File: handlers/selects/select_store_remove_product_from_category_.js
+// Arquivo: handlers/selects/select_store_remove_product_from_category_.js
 const db = require('../../database.js');
 const updateStoreVitrine = require('../../utils/updateStoreVitrine.js');
 
-module.exports = {
-    customId: 'select_store_remove_product_from_category_',
-    async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+// Precisamos importar o handler do menu para recarregá-lo no final
+// NOTA: Ajuste o caminho se necessário, baseando-se na sua estrutura
+const manageCategoryProductsHandler = require('../buttons/store_manage_category_products_.js'); 
 
-        // O ID da categoria está no final do CustomID (ex: ..._15)
-        const categoryId = interaction.customId.split('_').pop();
-        // O ID do produto selecionado está no valor do select menu
-        const productId = interaction.values[0];
+module.exports = {
+    // Novo ID correspondente ao arquivo UI acima
+    customId: 'select_store_cat_unlink_', 
+    async execute(interaction) {
+        await interaction.deferUpdate();
+
+        // ID agora está na posição 4: select_store_cat_unlink_ID
+        const categoryId = interaction.customId.split('_')[4]; 
+        const productIds = interaction.values;
 
         try {
-            // 1. CORREÇÃO CRÍTICA: Alterado de DELETE para UPDATE
-            // Apenas define category_id como NULL, mantendo o produto salvo.
+            // 1. DESVINCULAR (UPDATE) EM VEZ DE DELETAR
+            // Apenas setamos a categoria como NULL
             await db.query(
-                'UPDATE store_products SET category_id = NULL WHERE id = $1',
-                [productId]
+                'UPDATE store_products SET category_id = NULL WHERE guild_id = $1 AND id = ANY($2::int[])',
+                [interaction.guild.id, productIds]
             );
 
-            // 2. ATUALIZAÇÃO DA VITRINE EM TEMPO REAL
-            // Atualiza a vitrine da categoria afetada para o produto sumir de lá
+            // 2. ATUALIZAR VITRINE (Em tempo real)
+            // Atualiza a vitrine desta categoria específica para os produtos sumirem dela visualmente
             try {
                 await updateStoreVitrine(interaction.client, interaction.guild.id, categoryId);
             } catch (vitrineError) {
-                console.error('Erro ao atualizar vitrine (Remoção):', vitrineError);
+                console.error('Erro ao atualizar vitrine após remoção:', vitrineError);
             }
 
-            await interaction.editReply(`✅ Produto removido da categoria com sucesso! (Ele continua no seu estoque geral).`);
+            // 3. ATUALIZAR O MENU DE GERENCIAMENTO
+            // Simulamos a chamada do botão para recarregar a tela com os dados novos
+            interaction.customId = `store_manage_category_products_${categoryId}`;
+            if (manageCategoryProductsHandler && manageCategoryProductsHandler.execute) {
+                await manageCategoryProductsHandler.execute(interaction);
+            } else {
+                // Fallback caso o handler não seja carregado corretamente
+                await interaction.followUp({ content: "✅ Produtos removidos da categoria com sucesso!", ephemeral: true });
+            }
 
         } catch (error) {
-            console.error(error);
-            await interaction.editReply('❌ Erro ao desvincular produto da categoria.');
+            console.error("Erro ao desvincular produtos:", error);
+            await interaction.followUp({ content: "❌ Erro ao atualizar a categoria dos produtos.", ephemeral: true });
         }
     }
 };
