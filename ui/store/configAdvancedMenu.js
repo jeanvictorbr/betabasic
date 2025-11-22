@@ -78,7 +78,7 @@ module.exports = async function generateConfigAdvancedMenu(interaction, settings
                 { "type": 10, "content": "> Permite que o staff e o cliente conversem pela DM do bot (Requer Premium)." },
                 {
                     "type": 9, "accessory": { "type": 2, "style": dmFlowToggle.style, "label": dmFlowToggle.label, "custom_id": "store_toggle_dm_flow" },
-                    "components": [{ "type": 10, "content": `**Atendimento via DM:** ${dmFlow}` }]
+                    "components": [{ "type": 10, "content": `**Atendimento via DM:** ${dmFlow}`, "disabled": true } ]
                 },
 
                 { "type": 14, "divider": true, "spacing": 2 },
