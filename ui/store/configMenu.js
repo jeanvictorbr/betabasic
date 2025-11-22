@@ -47,7 +47,7 @@ module.exports = function generateConfigMenu(settings) {
                 { "type": 14, "divider": true, "spacing": 2 },
                  {
                     "type": 1, "components": [
-                        { "type": 2, "style": 1, "label": "💸 StoreFlow 💸", "emoji": { "name": "📢" }, "custom_id": "store_publish_vitrine", "disabled": true },
+                        { "type": 2, "style": 1, "label": " StoreFlow 💸", "emoji": { "name": "💸" }, "custom_id": "store_publish_vitrine", "disabled": true },
                         { "type": 2, "style": 2, "label": "Voltar", "emoji": { "name": "↩️" }, "custom_id": "open_store_menu" },
                         { "type": 2, "style": 2, "label": "Avançado", "emoji": { "name": "➡️" }, "custom_id": "store_config_advanced" }
                     ]
