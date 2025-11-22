@@ -77,7 +77,7 @@ module.exports = async function generateConfigAdvancedMenu(interaction, settings
                 { "type": 10, "content": "### 💬 Fluxo de Atendimento (DM)" },
                 { "type": 10, "content": "> Permite que o staff e o cliente conversem pela DM do bot (Requer Premium)." },
                 {
-                    "type": 9, "accessory": { "type": 2, "style": dmFlowToggle.style, "label": dmFlowToggle.label, "custom_id": "store_toggle_dm_flow" },
+                    "type": 9, "accessory": { "type": 2, "style": dmFlowToggle.style, "label": dmFlowToggle.label, "custom_id": "store_toggle_dm_flow", "disabled": true },
                     "components": [{ "type": 10, "content": `**Atendimento via DM:** ${dmFlow}`, "disabled": true } ]
                 },
 
