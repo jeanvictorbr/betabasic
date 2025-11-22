@@ -1,44 +1,56 @@
-// Crie em: handlers/selects/select_store_cart_remove_product.js
+// File: handlers/selects/select_store_remove_product.js
 const db = require('../../database.js');
-const generateCartPanel = require('../../ui/store/cartPanel.js');
+const generateManageProductsMenu = require('../../ui/store/manageProductsMenu.js');
+const updateStoreVitrine = require('../../utils/updateStoreVitrine.js');
+const { V2_FLAG, EPHEMERAL_FLAG } = require('../../utils/constants.js');
 
 module.exports = {
-    customId: 'select_store_cart_remove_product',
+    customId: 'select_store_remove_product',
     async execute(interaction) {
         await interaction.deferUpdate();
 
-        const indexToRemove = parseInt(interaction.values[0], 10);
+        const productIds = interaction.values;
 
-        const cartResult = await db.query('SELECT * FROM store_carts WHERE channel_id = $1', [interaction.channel.id]);
-        const cart = cartResult.rows[0];
-        let products = cart.products_json || [];
+        try {
+            // 1. Verificar quais categorias serão afetadas (para atualizar suas vitrines)
+            const checkRes = await db.query(
+                'SELECT category_id FROM store_products WHERE id = ANY($1::int[])', 
+                [productIds]
+            );
+            
+            const categoriesToUpdate = new Set();
+            checkRes.rows.forEach(r => {
+                if(r.category_id) categoriesToUpdate.add(r.category_id);
+            });
 
-        // Remove o item do array pelo índice
-        if (indexToRemove >= 0 && indexToRemove < products.length) {
-            products.splice(indexToRemove, 1);
+            // 2. Deletar os produtos
+            await db.query(
+                'DELETE FROM store_products WHERE guild_id = $1 AND id = ANY($2::int[])',
+                [interaction.guild.id, productIds]
+            );
+
+            // 3. Atualizar Vitrines Afetadas
+            // Atualiza a vitrine Global (sempre bom garantir)
+            await updateStoreVitrine(interaction.client, interaction.guild.id);
+            
+            // Atualiza vitrines de categorias específicas (se houver)
+            for (const catId of categoriesToUpdate) {
+                try {
+                    await updateStoreVitrine(interaction.client, interaction.guild.id, catId);
+                } catch (e) { console.error(`Erro update vitrine cat ${catId}:`, e); }
+            }
+
+            // 4. Recarregar o Menu de Produtos
+            const products = (await db.query('SELECT * FROM store_products WHERE guild_id = $1 ORDER BY id ASC', [interaction.guild.id])).rows;
+            
+            await interaction.editReply({
+                components: generateManageProductsMenu(products),
+                flags: V2_FLAG | EPHEMERAL_FLAG
+            });
+
+        } catch (error) {
+            console.error(error);
+            await interaction.followUp({ content: '❌ Erro ao remover produto.', flags: EPHEMERAL_FLAG });
         }
-
-        // Recalcula o preço se houver um cupom
-        if (cart.coupon_id) {
-            const coupon = (await db.query('SELECT * FROM store_coupons WHERE id = $1', [cart.coupon_id])).rows[0];
-            let originalPrice = products.reduce((sum, p) => sum + parseFloat(p.price), 0);
-            const discountAmount = originalPrice * (coupon.discount_percent / 100);
-            cart.total_price = originalPrice - discountAmount;
-        } else {
-            cart.total_price = products.reduce((sum, p) => sum + parseFloat(p.price), 0);
-        }
-        
-        await db.query('UPDATE store_carts SET products_json = $1::jsonb, total_price = $2 WHERE channel_id = $3', [JSON.stringify(products), cart.total_price, interaction.channel.id]);
-
-        const settings = (await db.query('SELECT * FROM guild_settings WHERE guild_id = $1', [interaction.guild.id])).rows[0] || {};
-        const coupon = cart.coupon_id ? (await db.query('SELECT * FROM store_coupons WHERE id = $1', [cart.coupon_id])).rows[0] : null;
-
-        const updatedPanel = generateCartPanel(cart, products, settings, coupon, interaction);
-
-        // Edita a mensagem principal do carrinho
-        await interaction.channel.messages.cache.find(m => m.author.id === interaction.client.user.id && m.embeds.length > 0).edit(updatedPanel);
-        
-        // Confirma a ação na interação efêmera
-        await interaction.editReply({ content: '✅ Item removido com sucesso!', components: [] });
     }
 };

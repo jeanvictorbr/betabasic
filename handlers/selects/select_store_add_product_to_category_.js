@@ -1,36 +1,35 @@
-// Crie em: handlers/selects/select_store_add_product_to_category_.js
+// File: handlers/selects/select_store_add_product_to_category_.js
 const db = require('../../database.js');
-const manageCategoryProductsHandler = require('../buttons/store_manage_category_products_.js');
 const updateStoreVitrine = require('../../utils/updateStoreVitrine.js');
-
+const manageCategoryProductsHandler = require('../buttons/store_manage_category_products_.js'); 
 
 module.exports = {
     customId: 'select_store_add_product_to_category_',
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferUpdate();
 
         const categoryId = interaction.customId.split('_').pop();
-        const productId = interaction.values[0];
+        const productIds = interaction.values;
 
         try {
-            // Atualiza o produto para pertencer a esta categoria
+            // 1. Vincular (Update)
             await db.query(
-                'UPDATE store_products SET category_id = $1 WHERE id = $2',
-                [categoryId, productId]
+                'UPDATE store_products SET category_id = $1 WHERE guild_id = $2 AND id = ANY($3::int[])',
+                [categoryId, interaction.guild.id, productIds]
             );
 
-            // ATUALIZAÇÃO DA VITRINE EM TEMPO REAL
+            // 2. Atualizar Vitrine
             try {
                 await updateStoreVitrine(interaction.client, interaction.guild.id, categoryId);
-            } catch (vitrineError) {
-                console.error('Erro ao atualizar vitrine (Adição):', vitrineError);
-            }
+            } catch (e) { console.error(e); }
 
-            await interaction.editReply(`✅ Produto adicionado à categoria com sucesso! A vitrine foi atualizada.`);
+            // 3. RECARREGAR O MENU
+            interaction.customId = `store_manage_category_products_${categoryId}`;
+            await manageCategoryProductsHandler.execute(interaction);
 
         } catch (error) {
             console.error(error);
-            await interaction.editReply('❌ Erro ao adicionar produto à categoria.');
+            if (!interaction.replied) await interaction.followUp({ content: "❌ Erro ao adicionar.", ephemeral: true });
         }
     }
 };
