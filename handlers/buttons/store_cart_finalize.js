@@ -6,47 +6,31 @@ const { EPHEMERAL_FLAG } = require('../../utils/constants.js');
 module.exports = {
     customId: 'store_cart_finalize',
     async execute(interaction, guildSettings) {
-        // 1. Adia a resposta para dar tempo de processar (evita o erro de "interação falhou")
+        // Importante: deferUpdate evita que a interação expire enquanto processamos
         await interaction.deferUpdate();
 
         try {
-            // 2. Busca os dados do carrinho e configurações
             const cartResult = await db.query("SELECT * FROM store_carts WHERE channel_id = $1", [interaction.channel.id]);
             const cart = cartResult.rows[0];
 
-            if (!cart) {
-                return interaction.followUp({ content: '❌ Carrinho não encontrado.', flags: EPHEMERAL_FLAG });
-            }
+            if (!cart) return interaction.followUp({ content: '❌ Carrinho não encontrado.', flags: EPHEMERAL_FLAG });
+            if (!cart.products_json || cart.products_json.length === 0) return interaction.followUp({ content: '⚠️ Carrinho vazio.', flags: EPHEMERAL_FLAG });
 
-            if (cart.products_json.length === 0) {
-                return interaction.followUp({ content: '⚠️ Seu carrinho está vazio.', flags: EPHEMERAL_FLAG });
-            }
-
-            // 3. Busca cupom (se houver)
             let coupon = null;
             if (cart.coupon_id) {
                 const couponResult = await db.query("SELECT * FROM store_coupons WHERE id = $1", [cart.coupon_id]);
                 coupon = couponResult.rows[0];
             }
 
-            // 4. Gera o Menu de Pagamento (Formato V2 - Array)
-            const payload = generatePaymentMenu(cart, guildSettings, coupon, interaction.guild);
+            const menu = generatePaymentMenu(cart, guildSettings, coupon, interaction.guild);
 
-            // 5. Verifica se o payload é válido antes de enviar
-            if (!payload || !Array.isArray(payload)) {
-                throw new Error("O menu de pagamento não retornou um formato V2 válido.");
-            }
-
-            // 6. Atualiza a mensagem do painel (Troca de Carrinho para Pagamento)
-            // OBS: Como é V2, passamos o primeiro objeto do array diretamente
-            await interaction.editReply(payload[0]);
+            // Atualiza o painel do carrinho para o menu de pagamento
+            // Passamos menu[0] pois é um array V2
+            await interaction.editReply(menu[0]);
 
         } catch (error) {
             console.error('[Store Finalize] Erro:', error);
-            await interaction.followUp({ 
-                content: '❌ Ocorreu um erro ao carregar a tela de pagamento. Tente novamente.', 
-                flags: EPHEMERAL_FLAG 
-            });
+            await interaction.followUp({ content: '❌ Erro ao carregar pagamento.', flags: EPHEMERAL_FLAG });
         }
     }
 };
