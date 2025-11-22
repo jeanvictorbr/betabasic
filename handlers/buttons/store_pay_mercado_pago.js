@@ -18,12 +18,10 @@ module.exports = {
             
             if (!cart) return interaction.editReply("❌ Carrinho não encontrado.");
 
-            // 2. RECÁLCULO DE SEGURANÇA (A CORREÇÃO REAL)
-            // Calcula o preço agora mesmo para garantir que não seja NULL
+            // 2. RECÁLCULO DE SEGURANÇA
             const products = cart.products_json || [];
             let calculatedTotal = 0;
             
-            // Soma os produtos
             products.forEach(p => {
                 calculatedTotal += parseFloat(p.price) * (p.quantity || 1);
             });
@@ -40,14 +38,10 @@ module.exports = {
                 }
             }
 
-            // Arredonda para 2 casas decimais
             calculatedTotal = parseFloat(calculatedTotal.toFixed(2));
 
-            // 3. SALVA O PREÇO NO BANCO (CRÍTICO)
-            // Isso impede o erro "Valor Inválido" atualizando o DB antes de chamar o MP
+            // 3. SALVA O PREÇO NO BANCO
             await db.query('UPDATE store_carts SET total_price = $1 WHERE channel_id = $2', [calculatedTotal, cartId]);
-            
-            // Atualiza o objeto cart local também para passar para a função
             cart.total_price = calculatedTotal;
 
             console.log(`[Debug Pagamento] Total Calculado: ${calculatedTotal} | Produtos: ${products.length}`);
@@ -78,7 +72,13 @@ module.exports = {
                     .setCustomId(`store_verify_mp_payment`)
                     .setLabel('Já paguei! Verificar')
                     .setStyle(ButtonStyle.Success)
-                    .setEmoji('✔️')
+                    .setEmoji('✔️'),
+                // --- BOTAO DE STAFF ADICIONADO AQUI ---
+                new ButtonBuilder()
+                    .setCustomId('store_staff_approve_payment')
+                    .setLabel('Staff: Aprovar Manualmente')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('🛡️')
             );
             
             await interaction.editReply({
