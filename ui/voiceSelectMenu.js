@@ -1,13 +1,15 @@
 const { ChannelType } = require('discord.js');
 
 module.exports = function generateVoiceSelectMenu(guild, channels) {
-    // Filtra apenas canais de voz e limita a 25 (limite do Discord)
+    // 1. Filtragem e Tratamento de Dados
+    // O erro ocorria aqui: Collections não têm .slice(). Usamos .first(25) que retorna um Array.
     const voiceChannels = channels
-        .filter(c => c.type === ChannelType.GuildVoice)
-        .sort((a, b) => a.position - b.position)
-        .slice(0, 25);
+        .filter(c => c.type === ChannelType.GuildVoice) // Apenas canais de voz
+        .sort((a, b) => a.position - b.position)      // Ordena pela posição no servidor
+        .first(25);                                   // Pega os primeiros 25 como ARRAY
 
-    if (voiceChannels.size === 0) {
+    // Como agora é um array, usamos .length em vez de .size
+    if (!voiceChannels || voiceChannels.length === 0) {
         return {
             components: [{
                 type: 17,
@@ -16,14 +18,15 @@ module.exports = function generateVoiceSelectMenu(guild, channels) {
         };
     }
 
+    // 2. Mapeamento para Opções do Select
     const options = voiceChannels.map(channel => ({
-        label: channel.name,
+        label: channel.name.substring(0, 100), // Garante que o nome não exceda o limite
         value: channel.id,
-        description: `ID: ${channel.id}`,
+        description: `Membros conectados: ${channel.members.size}`,
         emoji: { name: "🔊" }
     }));
 
-    // Adiciona opção de desconectar
+    // 3. Adiciona opção de desconectar no topo
     options.unshift({
         label: "Desconectar Bot",
         value: "disconnect",
@@ -31,6 +34,7 @@ module.exports = function generateVoiceSelectMenu(guild, channels) {
         emoji: { name: "❌" }
     });
 
+    // 4. Retorna o JSON do Componente V2
     return {
         components: [{
             type: 17,
