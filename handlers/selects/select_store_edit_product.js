@@ -1,73 +1,78 @@
 // Substitua em: handlers/selects/select_store_edit_product.js
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const db = require('../../database.js');
-const V2_FLAG = 1 << 15;
-const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
     customId: 'select_store_edit_product',
     async execute(interaction) {
-        // Importante: Use update() para trocar a interface na mesma mensagem
-        // Se o menu demorar, o deferUpdate() segura a onda, mas o ideal é update direto se possível.
-        // Aqui usaremos deferUpdate seguido de editReply para garantir o fetch do banco.
-        if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-
+        // NÃO use deferUpdate() aqui, senão o modal não abre!
+        
         const productId = interaction.values[0];
-
-        // Ignora se selecionou o placeholder "vazio"
-        if (productId === 'no_result') return;
+        if (productId === 'no_result') {
+            return interaction.reply({ content: '❌ Nenhuma seleção válida.', ephemeral: true });
+        }
 
         try {
-            // 1. Buscar dados atualizados do produto
+            // 1. Buscar dados do produto
             const product = (await db.query('SELECT * FROM store_products WHERE id = $1', [productId])).rows[0];
 
             if (!product) {
-                return interaction.editReply({ content: '❌ Produto não encontrado ou excluído.', components: [] });
+                return interaction.reply({ content: '❌ Produto não encontrado.', ephemeral: true });
             }
 
-            // 2. Formatar Preço
-            let priceFormatted = "R$ 0,00";
-            try {
-                priceFormatted = parseFloat(product.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-            } catch (e) { priceFormatted = `R$ ${product.price}`; }
+            // 2. Criar o Modal
+            // Usamos um ID dinâmico 'store_edit_sub_ID' para saber qual produto salvar depois
+            const modal = new ModalBuilder()
+                .setCustomId(`store_edit_sub_${product.id}`)
+                .setTitle(`Editar: ${product.name.substring(0, 35)}`);
 
-            // 3. Construir a Interface de Edição (Painel) MANUALMENTE AQUI
-            const editPanel = [
-                {
-                    type: 17,
-                    components: [
-                        { type: 10, content: `> **✏️ Editando:** ${product.name}` },
-                        { type: 10, content: `> **ID:** \`${product.id}\`\n> **Preço:** \`${priceFormatted}\`\n> **Estoque:** ${product.stock === -1 ? 'Infinito' : product.stock}` },
-                        { type: 14, divider: true, spacing: 2 },
-                        {
-                            type: 1, 
-                            components: [
-                                { type: 2, style: 1, label: "Nome", emoji: { name: "📝" }, custom_id: `store_edit_name_${product.id}` },
-                                { type: 2, style: 1, label: "Preço", emoji: { name: "💲" }, custom_id: `store_edit_price_${product.id}` },
-                                { type: 2, style: 1, label: "Descrição", emoji: { name: "📄" }, custom_id: `store_edit_desc_${product.id}` },
-                                { type: 2, style: 1, label: "Estoque", emoji: { name: "📦" }, custom_id: `store_edit_stock_${product.id}` }
-                            ]
-                        },
-                        {
-                            type: 1, 
-                            components: [
-                                { type: 2, style: 1, label: "Imagem", emoji: { name: "🖼️" }, custom_id: `store_edit_img_${product.id}` },
-                                { type: 2, style: 1, label: "Cor", emoji: { name: "🎨" }, custom_id: `store_edit_color_${product.id}` },
-                                { type: 2, style: 2, label: "Voltar a Lista", emoji: { name: "↩️" }, custom_id: "store_edit_product" } // Volta pro menu paginado
-                            ]
-                        }
-                    ]
-                }
-            ];
+            // 3. Campos do Modal (Máximo 5)
+            const inputName = new TextInputBuilder()
+                .setCustomId('name')
+                .setLabel('Nome do Produto')
+                .setStyle(TextInputStyle.Short)
+                .setValue(product.name)
+                .setMaxLength(100)
+                .setRequired(true);
 
-            // 4. Atualizar a mensagem
-            await interaction.editReply({
-                components: editPanel,
-                flags: V2_FLAG | EPHEMERAL_FLAG
-            });
+            const inputPrice = new TextInputBuilder()
+                .setCustomId('price')
+                .setLabel('Preço (ex: 10.50)')
+                .setStyle(TextInputStyle.Short)
+                .setValue(product.price.toString())
+                .setRequired(true);
+
+            const inputStock = new TextInputBuilder()
+                .setCustomId('stock')
+                .setLabel('Estoque (-1 para infinito)')
+                .setStyle(TextInputStyle.Short)
+                .setValue(product.stock.toString())
+                .setRequired(true);
+
+            const inputDesc = new TextInputBuilder()
+                .setCustomId('description')
+                .setLabel('Descrição')
+                .setStyle(TextInputStyle.Paragraph)
+                .setValue(product.description || '')
+                .setMaxLength(1000)
+                .setRequired(false);
+
+            // Adicionar campos ao modal
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(inputName),
+                new ActionRowBuilder().addComponents(inputPrice),
+                new ActionRowBuilder().addComponents(inputDesc),
+                new ActionRowBuilder().addComponents(inputStock)
+            );
+
+            // 4. Mostrar Modal
+            await interaction.showModal(modal);
 
         } catch (error) {
-            console.error("Erro ao abrir painel de edição:", error);
-            await interaction.followUp({ content: '❌ Erro ao carregar painel.', ephemeral: true });
+            console.error("Erro ao abrir modal de edição:", error);
+            if (!interaction.replied) {
+                await interaction.reply({ content: '❌ Erro ao abrir modal.', ephemeral: true });
+            }
         }
     }
 };
