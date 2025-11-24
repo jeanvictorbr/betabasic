@@ -1,54 +1,82 @@
-// Substitua o conteúdo em: ui/store/productsMenu.js
+// File: ui/store/productsMenu.js
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-const ITEMS_PER_PAGE = 3; 
+module.exports = (products, page = 0, totalPages = 1) => {
+    // Define o limite de produtos por página (Discord permite max 5 action rows, usamos 1 para nav, sobram 4. Vamos usar 3 para garantir espaço)
+    const PRODUCTS_PER_PAGE = 3;
+    
+    // Fatia os produtos para a página atual
+    const start = page * PRODUCTS_PER_PAGE;
+    const end = start + PRODUCTS_PER_PAGE;
+    const currentProducts = products.slice(start, end);
 
-module.exports = function generateProductsMenu(products = [], page = 0) {
-    const totalPages = Math.ceil(products.length / ITEMS_PER_PAGE);
-    const paginatedProducts = products.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+    const embeds = [{
+        title: '📦 Gerenciamento de Produtos',
+        description: 'Aqui estão seus produtos cadastrados. Clique no botão **Estoque** correspondente para gerenciar a quantidade.',
+        color: 0x2B2D31,
+        fields: currentProducts.map(product => ({
+            name: `🏷️ ${product.name}`,
+            value: `💰 **Preço:** R$ ${parseFloat(product.price).toFixed(2).replace('.', ',')}\n📦 **Estoque:** ${product.stock || 0}`,
+            inline: false
+        })),
+        footer: { text: `Página ${page + 1} de ${totalPages} • Total: ${products.length} produtos` }
+    }];
 
-    const productList = paginatedProducts.length > 0
-        ? paginatedProducts.map(p => {
-            const price = `R$ ${parseFloat(p.price).toFixed(2)}`;
-            const stock = p.stock === -1 ? 'Infinito' : p.stock;
-            const status = p.is_enabled ? '✅' : '❌';
-            // CORREÇÃO: O texto agora é dinâmico com base no p.stock_type
-            const stockLabel = p.stock_type === 'REAL' ? 'Estoque Real' : 'Estoque Fictício';
-            return `> ${status} **${p.name}** (\`ID: ${p.id}\`)\n> └─ **Preço:** \`${price}\` | **${stockLabel}:** \`${stock}\``;
-        }).join('\n\n')
-        : '> Nenhum produto cadastrado ainda.';
+    const components = [];
 
-    const paginationRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`store_products_page_${page - 1}`).setLabel('Anterior').setStyle(ButtonStyle.Primary).setDisabled(page === 0),
-        new ButtonBuilder().setCustomId(`store_products_page_${page + 1}`).setLabel('Próxima').setStyle(ButtonStyle.Primary).setDisabled(page + 1 >= totalPages)
-    );
-
-    return [
-        {
-            "type": 17, "accent_color": 15105570,
-            "components": [
-                { "type": 10, "content": "## 📦 Gerenciador de Produtos" },
-                { "type": 10, "content": `> Adicione, edite ou remova os itens do seu catálogo. Página ${page + 1} de ${totalPages || 1}.` },
-                { "type": 14, "divider": true, "spacing": 1 },
-                { "type": 10, "content": productList },
-                { "type": 14, "divider": true, "spacing": 2 },
-                totalPages > 1 ? { "type": 1, "components": paginationRow.toJSON().components } : null,
+    // Cria uma linha de botões para CADA produto (Botão de Estoque)
+    currentProducts.forEach(product => {
+        components.push({
+            type: 1,
+            components: [
                 {
-                    "type": 1, "components": [
-                        { "type": 2, "style": 3, "label": "Adicionar Produto", "emoji": { "name": "➕" }, "custom_id": "store_add_product" },
-                        { "type": 2, "style": 1, "label": "Editar Produto", "emoji": { "name": "✏️" }, "custom_id": "store_edit_product", "disabled": products.length === 0 },
-                        { "type": 2, "style": 4, "label": "Remover Produto", "emoji": { "name": "🗑️" }, "custom_id": "store_remove_product", "disabled": products.length === 0 }
-                    ]
+                    type: 2,
+                    style: 1, // Primary (Blurple)
+                    label: `Estoque: ${product.name.substring(0, 15)}`, // Limita o tamanho do nome
+                    custom_id: `store_open_stock_panel_${product.id}`, // ID que abrirá o painel de estoque
+                    emoji: { name: '📦' }
                 },
-                { "type": 14, "divider": true, "spacing": 1 },
                 {
-                    "type": 1, "components": [
-                        { "type": 2, "style": 2, "label": "Gerir Estoque Real", "emoji": { "name": "🔑" }, "custom_id": "store_manage_stock", "disabled": products.length === 0 }
-                    ]
-                },
-                { "type": 14, "divider": true, "spacing": 1 },
-                { "type": 1, "components": [{ "type": 2, "style": 2, "label": "Voltar", "emoji": { "name": "↩️" }, "custom_id": "open_store_menu" }] }
-            ].filter(Boolean)
-        }
-    ];
+                    type: 2,
+                    style: 2, // Secondary (Grey)
+                    label: 'Editar Infos', 
+                    custom_id: `store_edit_product_${product.id}`, // Mantém funcionalidade de editar
+                    emoji: { name: '✏️' }
+                }
+            ]
+        });
+    });
+
+    // Linha de Navegação (Anterior / Próximo / Criar Novo)
+    components.push({
+        type: 1,
+        components: [
+            {
+                type: 2,
+                style: 2,
+                label: '◀',
+                custom_id: `store_products_page_${page - 1}`,
+                disabled: page === 0
+            },
+            {
+                type: 2,
+                style: 2,
+                label: '▶',
+                custom_id: `store_products_page_${page + 1}`,
+                disabled: page >= totalPages - 1
+            },
+            {
+                type: 2,
+                style: 3, // Success (Green)
+                label: 'Novo Produto',
+                custom_id: 'store_add_product',
+                emoji: { name: '➕' }
+            }
+        ]
+    });
+
+    return {
+        embeds: embeds,
+        components: components
+    };
 };
