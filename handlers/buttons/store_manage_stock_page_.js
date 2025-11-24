@@ -1,33 +1,31 @@
-// Substitua em: handlers/buttons/store_manage_stock.js
+// Novo Arquivo: handlers/buttons/store_manage_stock_page_.js
 const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../../database.js');
 const V2_FLAG = 1 << 15;
 const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
-    customId: 'store_manage_stock',
+    customId: 'store_manage_stock_page_', // O 'index.js' detecta IDs que começam com isso
     async execute(interaction) {
         await interaction.deferUpdate();
-        
-        // 1. Busca TODOS os produtos
+
+        // 1. Descobre qual página o usuário quer (extrai do ID do botão)
+        // Ex: store_manage_stock_page_1 -> page = 1
+        const page = parseInt(interaction.customId.split('_').pop());
+
+        // 2. Busca os produtos novamente
         const products = (await db.query('SELECT id, name FROM store_products WHERE guild_id = $1 ORDER BY id ASC', [interaction.guild.id])).rows;
 
-        if (products.length === 0) {
-             return interaction.editReply({
-                components: [{ type: 17, components: [{ type: 10, content: "❌ Nenhum produto encontrado." }] }],
-                flags: V2_FLAG | EPHEMERAL_FLAG
-            });
-        }
-
-        // 2. Configuração da Paginação (Página 0)
-        const page = 0;
+        // 3. Configuração da Paginação
         const ITEMS_PER_PAGE = 25;
         const totalPages = Math.ceil(products.length / ITEMS_PER_PAGE);
         
-        // 3. Fatia os produtos para a página atual
-        const displayedProducts = products.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+        // Validação simples para não sair dos limites
+        const safePage = Math.max(0, Math.min(page, totalPages - 1));
 
-        // 4. Cria o Menu
+        // 4. Fatia os produtos
+        const displayedProducts = products.slice(safePage * ITEMS_PER_PAGE, (safePage + 1) * ITEMS_PER_PAGE);
+
         const options = displayedProducts.map(p => ({
             label: p.name.substring(0, 100),
             description: `ID do Produto: ${p.id}`,
@@ -36,22 +34,20 @@ module.exports = {
 
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId('select_store_manage_stock')
-            .setPlaceholder(`Selecione um produto (Página ${page + 1}/${totalPages})`)
+            .setPlaceholder(`Selecione um produto (Página ${safePage + 1}/${totalPages})`)
             .addOptions(options);
 
         // 5. Botões de Navegação
         const navigationRow = new ActionRowBuilder();
         
-        // Botão Anterior (Desativado na pág 0)
         navigationRow.addComponents(
             new ButtonBuilder()
-                .setCustomId(`store_manage_stock_page_${page - 1}`)
+                .setCustomId(`store_manage_stock_page_${safePage - 1}`)
                 .setLabel('◀️ Anterior')
                 .setStyle(ButtonStyle.Primary)
-                .setDisabled(true)
+                .setDisabled(safePage === 0) // Desativa se for a primeira
         );
 
-        // Botão Cancelar (No meio)
         navigationRow.addComponents(
             new ButtonBuilder()
                 .setCustomId('store_manage_products')
@@ -59,19 +55,18 @@ module.exports = {
                 .setStyle(ButtonStyle.Secondary)
         );
 
-        // Botão Próximo (Ativado se houver mais de 1 página)
         navigationRow.addComponents(
             new ButtonBuilder()
-                .setCustomId(`store_manage_stock_page_${page + 1}`)
+                .setCustomId(`store_manage_stock_page_${safePage + 1}`)
                 .setLabel('Próxima ▶️')
                 .setStyle(ButtonStyle.Primary)
-                .setDisabled(totalPages <= 1)
+                .setDisabled(safePage >= totalPages - 1) // Desativa se for a última
         );
 
-        // 6. Envia a resposta
+        // 6. Atualiza a mensagem
         await interaction.editReply({
             components: [
-                { type: 17, components: [{ type: 10, content: `> **Gerenciamento de Estoque**\n> Exibindo produtos **${page * ITEMS_PER_PAGE + 1}** a **${Math.min((page + 1) * ITEMS_PER_PAGE, products.length)}** de **${products.length}**.` }] },
+                { type: 17, components: [{ type: 10, content: `> **Gerenciamento de Estoque**\n> Exibindo produtos **${safePage * ITEMS_PER_PAGE + 1}** a **${Math.min((safePage + 1) * ITEMS_PER_PAGE, products.length)}** de **${products.length}**.` }] },
                 new ActionRowBuilder().addComponents(selectMenu), 
                 navigationRow
             ],
