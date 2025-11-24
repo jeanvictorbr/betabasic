@@ -1,4 +1,3 @@
-// Substitua em: handlers/buttons/store_manage_stock.js
 const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../../database.js');
 const V2_FLAG = 1 << 15;
@@ -7,10 +6,12 @@ const EPHEMERAL_FLAG = 1 << 6;
 module.exports = {
     customId: 'store_manage_stock',
     async execute(interaction) {
-        await interaction.deferUpdate();
+        // Se for um botão, usamos deferUpdate. Se for comando (raro aqui), deferReply.
+        if (interaction.isButton()) await interaction.deferUpdate();
+        else await interaction.deferReply({ flags: V2_FLAG | EPHEMERAL_FLAG });
         
-        // 1. Busca TODOS os produtos
-        const products = (await db.query('SELECT id, name FROM store_products WHERE guild_id = $1 ORDER BY id ASC', [interaction.guild.id])).rows;
+        // 1. Busca produtos (Incluindo o PREÇO agora)
+        const products = (await db.query('SELECT id, name, price FROM store_products WHERE guild_id = $1 ORDER BY id ASC', [interaction.guild.id])).rows;
 
         if (products.length === 0) {
              return interaction.editReply({
@@ -19,39 +20,51 @@ module.exports = {
             });
         }
 
-        // 2. Configuração da Paginação (Página 0)
+        // 2. Configuração da Paginação
         const page = 0;
         const ITEMS_PER_PAGE = 25;
         const totalPages = Math.ceil(products.length / ITEMS_PER_PAGE);
         
-        // 3. Fatia os produtos para a página atual
+        // 3. Fatia os produtos
         const displayedProducts = products.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
 
-        // 4. Cria o Menu
-        const options = displayedProducts.map(p => ({
-            label: p.name.substring(0, 100),
-            description: `ID do Produto: ${p.id}`,
-            value: p.id.toString(),
-        }));
+        // 4. Cria o Menu com EMOJI e PREÇO
+        const options = displayedProducts.map(p => {
+            const priceFormatted = parseFloat(p.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            return {
+                label: `${p.name.substring(0, 80)}`, // Nome
+                description: `💰 ${priceFormatted} | ID: ${p.id}`, // Preço e ID na descrição
+                value: p.id.toString(),
+                emoji: { name: "📦" } // Emoji fixo para ficar bonito
+            };
+        });
 
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId('select_store_manage_stock')
-            .setPlaceholder(`Selecione um produto (Página ${page + 1}/${totalPages})`)
+            .setPlaceholder(`📦 Selecione um produto (Pág ${page + 1}/${totalPages})`)
             .addOptions(options);
 
-        // 5. Botões de Navegação
+        // 5. Botões de Navegação + PESQUISA
         const navigationRow = new ActionRowBuilder();
         
-        // Botão Anterior (Desativado na pág 0)
+        // Botão Pesquisar (Novo)
+        navigationRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId('store_manage_stock_search')
+                .setLabel('🔍 Pesquisar')
+                .setStyle(ButtonStyle.Success)
+        );
+
+        // Botão Anterior
         navigationRow.addComponents(
             new ButtonBuilder()
                 .setCustomId(`store_manage_stock_page_${page - 1}`)
-                .setLabel('◀️ Anterior')
+                .setLabel('◀️')
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(true)
         );
 
-        // Botão Cancelar (No meio)
+        // Botão Cancelar
         navigationRow.addComponents(
             new ButtonBuilder()
                 .setCustomId('store_manage_products')
@@ -59,19 +72,18 @@ module.exports = {
                 .setStyle(ButtonStyle.Secondary)
         );
 
-        // Botão Próximo (Ativado se houver mais de 1 página)
+        // Botão Próximo
         navigationRow.addComponents(
             new ButtonBuilder()
                 .setCustomId(`store_manage_stock_page_${page + 1}`)
-                .setLabel('Próxima ▶️')
+                .setLabel('▶️')
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(totalPages <= 1)
         );
 
-        // 6. Envia a resposta
         await interaction.editReply({
             components: [
-                { type: 17, components: [{ type: 10, content: `> **Gerenciamento de Estoque**\n> Exibindo produtos **${page * ITEMS_PER_PAGE + 1}** a **${Math.min((page + 1) * ITEMS_PER_PAGE, products.length)}** de **${products.length}**.` }] },
+                { type: 17, components: [{ type: 10, content: `> **Gerenciamento de Estoque**\n> Selecione um produto abaixo para gerenciar seu estoque.\n> *Total de Produtos:* \`${products.length}\`` }] },
                 new ActionRowBuilder().addComponents(selectMenu), 
                 navigationRow
             ],
