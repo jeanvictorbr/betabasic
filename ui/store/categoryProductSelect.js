@@ -1,40 +1,59 @@
-// Crie em: ui/store/categoryProductSelect.js
+// Substitua em: ui/store/categoryProductSelect.js
 const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 module.exports = function generateCategoryProductSelect(products, currentPage, totalPages, mode, categoryId, isSearch = false, searchQuery = null) {
-    // mode: 'add' ou 'remove'
-    const isAdd = mode === 'add';
+    // mode: 'add', 'remove' ou 'edit'
     
     if (!products || !Array.isArray(products)) products = [];
     currentPage = parseInt(currentPage) || 0;
     totalPages = parseInt(totalPages) || 1;
 
-    // 1. Opções
+    // 1. Configuração Visual baseada no Modo
+    let placeholder, selectId, emojiIcon, actionText;
+
+    if (mode === 'add') {
+        selectId = `select_store_cat_product_add_${categoryId}`;
+        placeholder = 'Selecione para ADICIONAR...';
+        emojiIcon = '📥';
+        actionText = 'ADICIONAR';
+    } else if (mode === 'remove') {
+        selectId = `select_store_cat_product_remove_${categoryId}`;
+        placeholder = 'Selecione para REMOVER...';
+        emojiIcon = '📤';
+        actionText = 'REMOVER';
+    } else {
+        // MODO EDIT: Reaproveita o handler de edição global!
+        selectId = `select_store_edit_product`; 
+        placeholder = 'Selecione para EDITAR DETALHES...';
+        emojiIcon = '📝';
+        actionText = 'EDITAR';
+    }
+
+    // 2. Opções
     const options = products.map(p => {
         let priceFormatted = `R$ ${p.price}`; 
         try { priceFormatted = parseFloat(p.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); } catch (e) {}
         
         return {
             label: p.name.substring(0, 100),
-            description: `ID: ${p.id} | ${priceFormatted} | ${isAdd ? 'Clique para ADICIONAR' : 'Clique para REMOVER'}`,
+            description: `ID: ${p.id} | ${priceFormatted} | ${actionText}`,
             value: p.id.toString(),
-            emoji: isAdd ? '📥' : '📤'
+            emoji: emojiIcon
         };
     });
 
-    let placeholder = `📖 Pág. ${currentPage + 1}/${totalPages} - Selecione para ${isAdd ? 'ADICIONAR' : 'REMOVER'}...`;
     if (options.length === 0) {
         options.push({ label: 'Nenhum produto disponível', value: 'no_result', emoji: '🚫' });
         placeholder = "🚫 Lista Vazia";
     }
 
     const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId(`select_store_cat_product_${mode}_${categoryId}`) // ID carrega modo e cat
-        .setPlaceholder(isSearch ? `🔎 Busca: "${searchQuery}"` : placeholder)
+        .setCustomId(selectId)
+        .setPlaceholder(isSearch ? `🔎 Busca: "${searchQuery}"` : `${placeholder} (Pág ${currentPage + 1}/${totalPages})`)
         .addOptions(options)
         .setDisabled(options[0].value === 'no_result');
 
-    // 2. Paginação Numérica
+    // 3. Paginação
     const paginationButtons = [];
     if (!isSearch && totalPages > 1) {
         let start = Math.max(0, currentPage - 2);
@@ -45,7 +64,6 @@ module.exports = function generateCategoryProductSelect(products, currentPage, t
         for (let i = start; i <= end; i++) {
             paginationButtons.push(
                 new ButtonBuilder()
-                    // ID carrega tudo: store_cat_pg_add_5_0 (Modo_Cat_Pag)
                     .setCustomId(`store_cat_pg_${mode}_${categoryId}_${i}`)
                     .setLabel(`${i + 1}`)
                     .setStyle(i === currentPage ? ButtonStyle.Success : ButtonStyle.Secondary)
@@ -54,7 +72,8 @@ module.exports = function generateCategoryProductSelect(products, currentPage, t
         }
     }
 
-    // 3. Controles
+    // 4. Controles
+    // Botão de voltar retorna para o Hub da Categoria
     const controlButtons = [
         new ButtonBuilder().setCustomId(`store_cat_search_${mode}_${categoryId}`).setLabel('Pesquisar').setEmoji('🔍').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId(`store_manage_category_products_${categoryId}`).setLabel('Voltar').setStyle(ButtonStyle.Danger)
@@ -65,8 +84,9 @@ module.exports = function generateCategoryProductSelect(products, currentPage, t
     rows.push(new ActionRowBuilder().addComponents(controlButtons));
 
     const time = new Date().toLocaleTimeString('pt-BR');
-    const title = isAdd ? `> **➕ Adicionar à Categoria**` : `> **➖ Remover da Categoria**`;
-
+    
+    let title = `> **📂 Gerenciando Categoria** | ${actionText}`;
+    
     return [
         {
             type: 17,

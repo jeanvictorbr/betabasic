@@ -1,7 +1,7 @@
 // Substitua em: handlers/selects/select_store_cat_product_.js
 const db = require('../../database.js');
 const generateCategoryProductSelect = require('../../ui/store/categoryProductSelect.js');
-const updateStoreVitrine = require('../../utils/updateStoreVitrine.js'); // <--- IMPORTANTE
+const updateStoreVitrine = require('../../utils/updateStoreVitrine.js');
 const V2_FLAG = 1 << 15;
 const EPHEMERAL_FLAG = 1 << 6;
 
@@ -11,14 +11,13 @@ module.exports = {
         if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
 
         const parts = interaction.customId.replace('select_store_cat_product_', '').split('_');
-        const mode = parts[0]; // 'add' ou 'remove'
+        const mode = parts[0];
         const categoryId = parts[1];
         const productId = interaction.values[0];
 
         if (productId === 'no_result') return;
 
         try {
-            // 1. Executar Ação no Banco
             let actionMsg = "";
             if (mode === 'add') {
                 await db.query('UPDATE store_products SET category_id = $1 WHERE id = $2', [categoryId, productId]);
@@ -28,36 +27,43 @@ module.exports = {
                 actionMsg = `🗑️ Produto ID **${productId}** removido da categoria!`;
             }
 
-            // 2. ATUALIZAR VITRINE (Reflete a mudança de categoria)
+            // Atualizar Vitrine
             try {
                 await updateStoreVitrine(interaction.client, interaction.guild.id);
             } catch (err) {
                 console.error("Erro ao atualizar vitrine na categoria:", err);
             }
 
-            // 3. Recarregar lista
+            // Recarregar Lista (Mantendo o filtro correto)
             const ITEMS_PER_PAGE = 25;
-            let countQuery, productsQuery;
+            let countQuery, productsQuery, queryParams, countParams;
 
             if (mode === 'add') {
-                countQuery = 'SELECT COUNT(*) FROM store_products WHERE category_id IS DISTINCT FROM $1';
-                productsQuery = 'SELECT id, name, price FROM store_products WHERE category_id IS DISTINCT FROM $1 ORDER BY id ASC LIMIT $2 OFFSET 0';
+                // FILTRO: Apenas NULL
+                countQuery = 'SELECT COUNT(*) FROM store_products WHERE category_id IS NULL';
+                productsQuery = 'SELECT id, name, price FROM store_products WHERE category_id IS NULL ORDER BY id ASC LIMIT $1 OFFSET 0';
+                countParams = [];
+                queryParams = [ITEMS_PER_PAGE];
             } else {
+                // FILTRO: Apenas desta Categoria
                 countQuery = 'SELECT COUNT(*) FROM store_products WHERE category_id = $1';
                 productsQuery = 'SELECT id, name, price FROM store_products WHERE category_id = $1 ORDER BY id ASC LIMIT $2 OFFSET 0';
+                countParams = [categoryId];
+                queryParams = [categoryId, ITEMS_PER_PAGE];
             }
 
-            const countRes = await db.query(countQuery, [categoryId]);
+            const countRes = await db.query(countQuery, countParams);
             const totalItems = parseInt(countRes.rows[0].count);
             let totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
 
-            const products = (await db.query(productsQuery, [categoryId, ITEMS_PER_PAGE])).rows;
+            const products = (await db.query(productsQuery, queryParams)).rows;
 
             const uiComponents = generateCategoryProductSelect(products, 0, totalPages, mode, categoryId);
 
+            // Feedback
             if (uiComponents[0] && uiComponents[0].components && uiComponents[0].components[0]) {
                 const oldContent = uiComponents[0].components[0].content;
-                uiComponents[0].components[0].content = `> ${actionMsg}\n> 🔄 Vitrine atualizada!\n` + oldContent;
+                uiComponents[0].components[0].content = `> ${actionMsg}\n` + oldContent;
             }
 
             await interaction.editReply({

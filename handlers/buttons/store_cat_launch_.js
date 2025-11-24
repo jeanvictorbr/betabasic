@@ -1,41 +1,43 @@
-// Crie em: handlers/buttons/store_cat_launch_.js
+// Substitua em: handlers/buttons/store_cat_launch_.js
 const db = require('../../database.js');
 const generateCategoryProductSelect = require('../../ui/store/categoryProductSelect.js');
 const V2_FLAG = 1 << 15;
 const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
-    customId: 'store_cat_launch_', // Captura store_cat_launch_add_5
+    customId: 'store_cat_launch_', 
     async execute(interaction) {
         if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
 
-        // Parse do ID: store_cat_launch_MODE_CATID
         const parts = interaction.customId.replace('store_cat_launch_', '').split('_');
-        const mode = parts[0]; // 'add' ou 'remove'
+        const mode = parts[0]; // 'add', 'remove', 'edit'
         const categoryId = parts[1];
 
         const ITEMS_PER_PAGE = 25;
 
         try {
             let countQuery, productsQuery;
+            let queryParams, countParams;
 
             if (mode === 'add') {
-                // Produtos SEM categoria ou de OUTRA categoria (depende da sua regra, assumo 'sem categoria' ou 'qualquer um')
-                // Geralmente adicionamos produtos que estão 'soltos' (category_id IS NULL)
-                // Ou podemos roubar de outras categorias. Vamos listar TODOS que NÃO estão nesta categoria.
-                countQuery = 'SELECT COUNT(*) FROM store_products WHERE category_id IS DISTINCT FROM $1';
-                productsQuery = 'SELECT id, name, price FROM store_products WHERE category_id IS DISTINCT FROM $1 ORDER BY id ASC LIMIT $2 OFFSET 0';
+                // Produtos SEM categoria
+                countQuery = 'SELECT COUNT(*) FROM store_products WHERE category_id IS NULL';
+                productsQuery = 'SELECT id, name, price FROM store_products WHERE category_id IS NULL ORDER BY id ASC LIMIT $1 OFFSET 0';
+                countParams = [];
+                queryParams = [ITEMS_PER_PAGE];
             } else {
-                // Produtos DESTA categoria
+                // Modo 'remove' OU 'edit' (Produtos DESTA categoria)
                 countQuery = 'SELECT COUNT(*) FROM store_products WHERE category_id = $1';
                 productsQuery = 'SELECT id, name, price FROM store_products WHERE category_id = $1 ORDER BY id ASC LIMIT $2 OFFSET 0';
+                countParams = [categoryId];
+                queryParams = [categoryId, ITEMS_PER_PAGE];
             }
-
-            const countRes = await db.query(countQuery, [categoryId]);
+            
+            const countRes = await db.query(countQuery, countParams);
             const totalItems = parseInt(countRes.rows[0].count);
             let totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
 
-            const products = (await db.query(productsQuery, [categoryId, ITEMS_PER_PAGE])).rows;
+            const products = (await db.query(productsQuery, queryParams)).rows;
 
             const uiComponents = generateCategoryProductSelect(products, 0, totalPages, mode, categoryId);
 
