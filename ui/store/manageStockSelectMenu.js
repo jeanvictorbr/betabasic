@@ -2,10 +2,10 @@
 const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 /**
- * Gera o menu de seleção com paginação numérica inteligente.
+ * Gera o menu de seleção com paginação numérica inteligente e correção de IDs duplicados.
  */
 module.exports = function generateManageStockSelectMenu(products, currentPage, totalPages, isSearch = false, searchQuery = null) {
-    // Garante arrays e números válidos
+    // Validação básica
     if (!products || !Array.isArray(products)) products = [];
     currentPage = parseInt(currentPage) || 0;
     totalPages = parseInt(totalPages) || 1;
@@ -47,48 +47,49 @@ module.exports = function generateManageStockSelectMenu(products, currentPage, t
     const paginationButtons = [];
 
     if (!isSearch && totalPages > 1) {
-        // Botão "Anterior" (só aparece se não for a pág 1)
+        // Botão "Anterior" (Seta)
+        // OBS: Adicionamos '_arrow' ao ID para não colidir com o botão numérico da mesma página
         if (currentPage > 0) {
             paginationButtons.push(
                 new ButtonBuilder()
-                    .setCustomId(`store_manage_stock_page_${currentPage - 1}`)
+                    .setCustomId(`store_manage_stock_page_${currentPage - 1}_arrow`) 
                     .setEmoji('⬅️')
                     .setStyle(ButtonStyle.Secondary)
             );
         }
 
-        // Lógica da Janela Deslizante (Mostra até 3 números: Anterior, Atual, Próximo)
-        // Ex: Pág 5 de 10 -> Mostra [4] [5] [6]
+        // Lógica da Janela Deslizante (Números)
         let startPage = Math.max(0, currentPage - 1);
         let endPage = Math.min(totalPages - 1, currentPage + 1);
 
-        // Ajuste para garantir que sempre mostre botões suficientes nas pontas
-        if (currentPage === 0) endPage = Math.min(totalPages - 1, 2); // Se tá na 1, mostra 1, 2, 3
-        if (currentPage === totalPages - 1) startPage = Math.max(0, totalPages - 3); // Se tá na última, mostra antepenúltima...
+        // Ajuste fino para sempre mostrar 3 botões quando possível
+        if (currentPage === 0) endPage = Math.min(totalPages - 1, 2); 
+        if (currentPage === totalPages - 1) startPage = Math.max(0, totalPages - 3); 
 
         for (let i = startPage; i <= endPage; i++) {
             const isCurrent = i === currentPage;
             paginationButtons.push(
                 new ButtonBuilder()
-                    .setCustomId(`store_manage_stock_page_${i}`)
-                    .setLabel(`${i + 1}`) // Mostra número humano (1-based)
-                    .setStyle(isCurrent ? ButtonStyle.Success : ButtonStyle.Secondary) // Atual é verde
-                    .setDisabled(isCurrent) // Desativa o botão da página atual
+                    .setCustomId(`store_manage_stock_page_${i}`) // ID padrão numérico
+                    .setLabel(`${i + 1}`) 
+                    .setStyle(isCurrent ? ButtonStyle.Success : ButtonStyle.Secondary)
+                    .setDisabled(isCurrent)
             );
         }
 
-        // Botão "Próximo" (só aparece se não for a última pág)
+        // Botão "Próximo" (Seta)
+        // OBS: Adicionamos '_arrow' ao ID para garantir unicidade
         if (currentPage < totalPages - 1) {
             paginationButtons.push(
                 new ButtonBuilder()
-                    .setCustomId(`store_manage_stock_page_${currentPage + 1}`)
+                    .setCustomId(`store_manage_stock_page_${currentPage + 1}_arrow`)
                     .setEmoji('➡️')
                     .setStyle(ButtonStyle.Secondary)
             );
         }
     }
 
-    // --- 3. Botões de Controle (Pesquisa e Voltar) ---
+    // --- 3. Botões de Controle ---
     const controlButtons = [
         new ButtonBuilder()
             .setCustomId('store_manage_stock_search')
@@ -104,16 +105,13 @@ module.exports = function generateManageStockSelectMenu(products, currentPage, t
     // --- 4. Montagem das Rows ---
     const rows = [new ActionRowBuilder().addComponents(selectMenu)];
     
-    // Adiciona row de paginação se tiver botões (e não for busca)
     if (paginationButtons.length > 0) {
         rows.push(new ActionRowBuilder().addComponents(paginationButtons));
     }
     
-    // Adiciona row de controle
     rows.push(new ActionRowBuilder().addComponents(controlButtons));
 
     // --- 5. Retorno V2 ---
-    // Adicionamos um timestamp no footer para o Admin ver que atualizou
     const time = new Date().toLocaleTimeString('pt-BR');
     
     return [
