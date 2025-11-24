@@ -11,7 +11,7 @@ module.exports = {
 
         const ITEMS_PER_PAGE = 25;
         
-        // Contar
+        // Contar total
         const countResult = await db.query('SELECT COUNT(*) as count FROM store_products WHERE guild_id = $1', [interaction.guild.id]);
         const totalItems = parseInt(countResult.rows[0].count || 0);
         let totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
