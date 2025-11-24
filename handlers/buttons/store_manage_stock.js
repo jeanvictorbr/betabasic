@@ -1,12 +1,16 @@
 const db = require('../../database.js');
 const stockMenu = require('../../ui/store/stockMenu.js');
 
+// Mantemos as flags, embora editReply gerencie a efemeridade automaticamente com base na mensagem original
 const V2_FLAG = 1 << 15;
 const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
     customId: 'store_manage_stock',
     async execute(interaction) {
+        // Evita timeout enquanto consulta o DB
+        await interaction.deferUpdate();
+
         const guildId = interaction.guild.id;
 
         // Conta o total de produtos
@@ -25,14 +29,10 @@ module.exports = {
 
         const payload = await stockMenu(products.rows, 0, totalPages);
 
-        return interaction.client.api.interactions(interaction.id, interaction.token).callback.post({
-            data: {
-                type: 7, // Update Message
-                data: {
-                    ...payload,
-                    flags: EPHEMERAL_FLAG
-                }
-            }
+        // Usa o método nativo do Discord.js para editar a mensagem
+        await interaction.editReply({
+            content: payload.content,
+            components: payload.components
         });
     }
 };
