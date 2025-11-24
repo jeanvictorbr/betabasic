@@ -1,5 +1,6 @@
 const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
+// DEFINIÇÃO RIGOROSA DAS FLAGS
 const V2_FLAG = 1 << 15;
 const EPHEMERAL_FLAG = 1 << 6;
 
@@ -8,7 +9,6 @@ module.exports = (products, page = 0, isSearchResult = false) => {
     const itemsPerPage = 25;
     const totalPages = Math.ceil(products.length / itemsPerPage);
     
-    // Garante que a página não exceda os limites
     if (page < 0) page = 0;
     if (page >= totalPages && totalPages > 0) page = totalPages - 1;
 
@@ -16,7 +16,10 @@ module.exports = (products, page = 0, isSearchResult = false) => {
     const end = start + itemsPerPage;
     const currentProducts = products.slice(start, end);
 
-    // 2. Construção do Menu
+    // 2. Construção dos Componentes (JSON Puro type: 17 compliance)
+    const components = [];
+
+    // Row do Menu
     const menuRow = {
         type: 1,
         components: []
@@ -36,7 +39,6 @@ module.exports = (products, page = 0, isSearchResult = false) => {
         };
         menuRow.components.push(menu);
     } else {
-        // Caso não haja produtos (pesquisa falhou ou loja vazia)
         const menuDisabled = {
             type: 3,
             custom_id: 'disabled_menu',
@@ -46,48 +48,46 @@ module.exports = (products, page = 0, isSearchResult = false) => {
         };
         menuRow.components.push(menuDisabled);
     }
+    components.push(menuRow);
 
-    // 3. Construção dos Botões de Navegação e Pesquisa
+    // Row dos Botões
     const buttonRow = {
         type: 1,
         components: [
             {
                 type: 2,
-                style: 2, // Secondary (Cinza)
+                style: 2, // Secondary
                 label: 'Anterior',
                 emoji: { name: '⬅️' },
                 custom_id: `store_manage_stock_page_${page - 1}`,
-                disabled: page === 0 // Desativa se for a primeira página
+                disabled: page === 0
             },
             {
                 type: 2,
-                style: 1, // Primary (Azul)
+                style: 1, // Primary
                 label: isSearchResult ? 'Limpar Pesquisa' : 'Pesquisar',
                 emoji: { name: isSearchResult ? '✖️' : '🔍' },
-                custom_id: isSearchResult ? 'store_manage_stock' : 'store_manage_stock_search' 
-                // Se já é pesquisa, volta pro menu principal. Se não, abre busca.
+                custom_id: isSearchResult ? 'store_manage_stock' : 'store_manage_stock_search'
             },
             {
                 type: 2,
-                style: 2, // Secondary (Cinza)
+                style: 2, // Secondary
                 label: 'Próxima',
                 emoji: { name: '➡️' },
                 custom_id: `store_manage_stock_page_${page + 1}`,
-                disabled: page >= totalPages - 1 // Desativa se for a última página
+                disabled: page >= totalPages - 1
             }
         ]
     };
+    components.push(buttonRow);
 
-    // Montagem da resposta V2
-    const response = {
+    // 3. Montagem da Resposta V2
+    // CORREÇÃO CRÍTICA: As flags devem incluir V2_FLAG (1<<15)
+    return {
         content: isSearchResult 
             ? `🔍 **Resultado da Pesquisa**\nEncontrados: ${products.length} produtos.\nPágina ${page + 1}/${totalPages || 1}`
             : `📦 **Gerenciamento de Estoque Real**\nTotal de Produtos: ${products.length}\nPágina ${page + 1}/${totalPages || 1}`,
-        components: [menuRow, buttonRow],
-        flags: EPHEMERAL_FLAG // Apenas visível para quem clicou
+        components: components,
+        flags: V2_FLAG | EPHEMERAL_FLAG // OBRIGATÓRIO PARA APP V2
     };
-
-    // Importante: type: 17 é para APIs, aqui retornamos o corpo da resposta
-    // O handler deve envolver isso no update ou reply
-    return response;
 };

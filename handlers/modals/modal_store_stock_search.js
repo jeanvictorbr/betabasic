@@ -14,16 +14,19 @@ module.exports = {
                 ORDER BY id ASC
             `, [interaction.guild.id, `%${query}%`]);
 
-            // Gera a UI na página 0 dos resultados, marcando isSearch como true
+            // Gera a UI com flag V2 já inclusa no arquivo stockMenu.js
             const response = stockMenuUI(result.rows, 0, true);
 
-            // Atualiza a mensagem original
+            // Update na mensagem original que abriu o modal
             await interaction.update(response);
 
         } catch (error) {
             console.error('Erro na pesquisa de estoque:', error);
             if (!interaction.replied) {
-                await interaction.reply({ content: '❌ Erro ao realizar pesquisa.', flags: 64 });
+                await interaction.reply({ 
+                    content: '❌ Erro ao realizar pesquisa.', 
+                    flags: (1 << 15) | (1 << 6)
+                });
             }
         }
     }

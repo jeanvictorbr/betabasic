@@ -12,13 +12,14 @@ module.exports = {
             `, [interaction.guild.id]);
 
             if (result.rows.length === 0) {
+                // Resposta de erro também precisa ser V2 + Ephemeral
                 return interaction.reply({ 
                     content: '❌ Você ainda não criou nenhum produto.', 
-                    flags: 64 
+                    flags: (1 << 15) | (1 << 6) 
                 });
             }
 
-            const response = stockMenuUI(result.rows, 0); // Página 0, sem pesquisa
+            const response = stockMenuUI(result.rows, 0);
 
             if (interaction.message) {
                 await interaction.update(response);
@@ -28,7 +29,10 @@ module.exports = {
 
         } catch (error) {
             console.error('Erro ao abrir estoque:', error);
-            const errPayload = { content: '❌ Erro ao carregar estoque.', flags: 64 };
+            const errPayload = { 
+                content: '❌ Erro ao carregar estoque.', 
+                flags: (1 << 15) | (1 << 6) // V2 + Ephemeral
+            };
             if (interaction.deferred || interaction.replied) await interaction.followUp(errPayload);
             else await interaction.reply(errPayload);
         }
