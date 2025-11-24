@@ -4,32 +4,35 @@ const stockMenu = require('../../ui/store/stockMenu.js');
 const V2_FLAG = 1 << 15;
 const EPHEMERAL_FLAG = 1 << 6;
 
-module.exports = async (interaction) => {
-    const guildId = interaction.guild.id;
+module.exports = {
+    customId: 'store_manage_stock',
+    async execute(interaction) {
+        const guildId = interaction.guild.id;
 
-    // Conta o total de produtos
-    const countRes = await db.query('SELECT COUNT(*) FROM store_products WHERE guild_id = $1', [guildId]);
-    const totalProducts = parseInt(countRes.rows[0].count);
-    const totalPages = Math.ceil(totalProducts / 25) || 1;
+        // Conta o total de produtos
+        const countRes = await db.query('SELECT COUNT(*) FROM store_products WHERE guild_id = $1', [guildId]);
+        const totalProducts = parseInt(countRes.rows[0].count);
+        const totalPages = Math.ceil(totalProducts / 25) || 1;
 
-    // Busca apenas os primeiros 25 produtos
-    const products = await db.query(`
-        SELECT id, name, price, stock 
-        FROM store_products 
-        WHERE guild_id = $1 
-        ORDER BY id DESC 
-        LIMIT 25 OFFSET 0
-    `, [guildId]);
+        // Busca apenas os primeiros 25 produtos
+        const products = await db.query(`
+            SELECT id, name, price, stock 
+            FROM store_products 
+            WHERE guild_id = $1 
+            ORDER BY id DESC 
+            LIMIT 25 OFFSET 0
+        `, [guildId]);
 
-    const payload = await stockMenu(products.rows, 0, totalPages);
+        const payload = await stockMenu(products.rows, 0, totalPages);
 
-    return interaction.client.api.interactions(interaction.id, interaction.token).callback.post({
-        data: {
-            type: 7, // Update Message
+        return interaction.client.api.interactions(interaction.id, interaction.token).callback.post({
             data: {
-                ...payload,
-                flags: EPHEMERAL_FLAG
+                type: 7, // Update Message
+                data: {
+                    ...payload,
+                    flags: EPHEMERAL_FLAG
+                }
             }
-        }
-    });
+        });
+    }
 };
