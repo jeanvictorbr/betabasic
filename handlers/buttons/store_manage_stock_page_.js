@@ -4,52 +4,57 @@ const V2_FLAG = 1 << 15;
 const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
-    customId: 'store_manage_stock_page_', // O Index busca por 'startsWith'
+    customId: 'store_manage_stock_page_', // Prefixo para detecção dinâmica
     async execute(interaction) {
         await interaction.deferUpdate();
 
-        // 1. Extrai a página do ID do botão (ex: ..._page_2)
+        // 1. Extrai o número da página do ID do botão
+        // Ex: store_manage_stock_page_1 -> page = 1
         const parts = interaction.customId.split('_');
-        const pageIndex = parseInt(parts[parts.length - 1]);
-        const page = isNaN(pageIndex) ? 0 : pageIndex;
+        let page = parseInt(parts[parts.length - 1]);
+        if (isNaN(page)) page = 0;
 
-        // 2. Busca os produtos novamente
+        // 2. Busca TODOS os produtos novamente
         const products = (await db.query('SELECT id, name, price FROM store_products WHERE guild_id = $1 ORDER BY id ASC', [interaction.guild.id])).rows;
 
+        // 3. Cálculos de Paginação
         const ITEMS_PER_PAGE = 25;
         const totalPages = Math.ceil(products.length / ITEMS_PER_PAGE);
         
-        // Garante que a página está dentro dos limites
+        // Garante que a página pedida existe (evita crash se produtos foram deletados)
         const safePage = Math.max(0, Math.min(page, totalPages - 1));
 
-        // 3. Fatia os produtos
-        const displayedProducts = products.slice(safePage * ITEMS_PER_PAGE, (safePage + 1) * ITEMS_PER_PAGE);
+        // 4. Fatia os produtos para a página correta
+        const start = safePage * ITEMS_PER_PAGE;
+        const end = start + ITEMS_PER_PAGE;
+        const displayedProducts = products.slice(start, end);
 
-        // 4. Cria o Menu (Igual ao principal)
+        if (displayedProducts.length === 0) {
+            return interaction.editReply({ content: "⚠️ Não há produtos nesta página." });
+        }
+
+        // 5. Cria o Menu (Mesmo padrão do principal)
         const options = displayedProducts.map(p => {
-            const priceFormatted = parseFloat(p.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            const priceVal = parseFloat(p.price);
+            const priceFormatted = isNaN(priceVal) ? "R$ 0,00" : priceVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
             return {
-                label: `${p.name.substring(0, 80)}`,
+                label: p.name.substring(0, 80), 
                 description: `💰 ${priceFormatted} | ID: ${p.id}`,
                 value: p.id.toString(),
                 emoji: { name: "📦" }
             };
         });
 
-        // Proteção contra página vazia (caso delete produtos enquanto navega)
-        if (options.length === 0) {
-            return interaction.editReply({ content: "⚠️ Esta página não tem mais produtos." });
-        }
-
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId('select_store_manage_stock')
             .setPlaceholder(`📦 Selecione (Pág ${safePage + 1}/${totalPages})`)
             .addOptions(options);
 
-        // 5. Botões de Navegação
+        // 6. Botões de Navegação
         const navigationRow = new ActionRowBuilder();
 
-        // Botão Pesquisar
+        // Pesquisa
         navigationRow.addComponents(
             new ButtonBuilder()
                 .setCustomId('store_manage_stock_search')
@@ -57,6 +62,7 @@ module.exports = {
                 .setStyle(ButtonStyle.Success)
         );
 
+        // Anterior
         navigationRow.addComponents(
             new ButtonBuilder()
                 .setCustomId(`store_manage_stock_page_${safePage - 1}`)
@@ -65,6 +71,7 @@ module.exports = {
                 .setDisabled(safePage === 0)
         );
 
+        // Cancelar
         navigationRow.addComponents(
             new ButtonBuilder()
                 .setCustomId('store_manage_products')
@@ -72,6 +79,7 @@ module.exports = {
                 .setStyle(ButtonStyle.Secondary)
         );
 
+        // Próxima
         navigationRow.addComponents(
             new ButtonBuilder()
                 .setCustomId(`store_manage_stock_page_${safePage + 1}`)
@@ -80,10 +88,10 @@ module.exports = {
                 .setDisabled(safePage >= totalPages - 1)
         );
 
-        // 6. Atualiza
+        // 7. Atualiza a mensagem
         await interaction.editReply({
             components: [
-                { type: 17, components: [{ type: 10, content: `> **Gerenciamento de Estoque**\n> Exibindo produtos **${safePage * ITEMS_PER_PAGE + 1}** a **${Math.min((safePage + 1) * ITEMS_PER_PAGE, products.length)}** de **${products.length}**.` }] },
+                { type: 17, components: [{ type: 10, content: `> **Gerenciamento de Estoque**\n> Exibindo produtos **${start + 1}** a **${Math.min(end, products.length)}** de **${products.length}**.` }] },
                 new ActionRowBuilder().addComponents(selectMenu), 
                 navigationRow
             ],
