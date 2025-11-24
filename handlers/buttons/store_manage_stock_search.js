@@ -1,20 +1,23 @@
-const { ModalBuilder, TextInputBuilder, ActionRowBuilder, TextInputStyle } = require('discord.js');
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 
 module.exports = {
     customId: 'store_manage_stock_search',
-    async execute(interaction) {
+    run: async (client, interaction) => {
+        // Cria o modal V2 manualmente ou usando o Builder (aqui usando builder para facilitar o modal, mas output é JSON)
         const modal = new ModalBuilder()
             .setCustomId('modal_store_stock_search')
-            .setTitle('🔍 Pesquisar Produto');
+            .setTitle('Pesquisar Produto');
 
         const input = new TextInputBuilder()
             .setCustomId('search_query')
-            .setLabel('Nome do produto')
+            .setLabel("Nome do produto (ou parte dele)")
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Digite o nome...')
+            .setPlaceholder("Ex: Vip Gold")
             .setRequired(true);
 
-        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        const row = new ActionRowBuilder().addComponents(input);
+        modal.addComponents(row);
+
         await interaction.showModal(modal);
     }
 };
