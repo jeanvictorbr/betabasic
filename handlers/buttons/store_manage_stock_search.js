@@ -2,8 +2,7 @@ const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = req
 
 module.exports = {
     customId: 'store_manage_stock_search',
-    run: async (client, interaction) => {
-        // Cria o modal V2 manualmente ou usando o Builder (aqui usando builder para facilitar o modal, mas output é JSON)
+    async execute(interaction) {
         const modal = new ModalBuilder()
             .setCustomId('modal_store_stock_search')
             .setTitle('Pesquisar Produto');

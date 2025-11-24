@@ -3,7 +3,7 @@ const stockMenuUI = require('../../ui/store/stockMenu.js');
 
 module.exports = {
     customId: 'store_manage_stock',
-    run: async (client, interaction) => {
+    async execute(interaction) {
         try {
             const result = await db.query(`
                 SELECT * FROM store_products 
@@ -20,11 +20,9 @@ module.exports = {
 
             const response = stockMenuUI(result.rows, 0); // Página 0, sem pesquisa
 
-            // Se for um clique de botão (como "Voltar" ou "Limpar"), usa update
             if (interaction.message) {
                 await interaction.update(response);
             } else {
-                // Se for comando slash inicial
                 await interaction.reply(response);
             }
 

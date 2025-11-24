@@ -3,11 +3,10 @@ const stockMenuUI = require('../../ui/store/stockMenu.js');
 
 module.exports = {
     customId: 'modal_store_stock_search',
-    run: async (client, interaction) => {
+    async execute(interaction) {
         try {
             const query = interaction.fields.getTextInputValue('search_query');
 
-            // Busca produtos filtrados pelo nome (Case Insensitive)
             const result = await db.query(`
                 SELECT * FROM store_products 
                 WHERE guild_id = $1 
@@ -18,13 +17,11 @@ module.exports = {
             // Gera a UI na página 0 dos resultados, marcando isSearch como true
             const response = stockMenuUI(result.rows, 0, true);
 
-            // Atualiza a mensagem original (onde o botão de pesquisa foi clicado)
-            // Nota: Modais geralmente precisam de update() se vierem de um componente
+            // Atualiza a mensagem original
             await interaction.update(response);
 
         } catch (error) {
             console.error('Erro na pesquisa de estoque:', error);
-            // Se der erro no update, enviamos uma ephemeral
             if (!interaction.replied) {
                 await interaction.reply({ content: '❌ Erro ao realizar pesquisa.', flags: 64 });
             }
