@@ -1,23 +1,24 @@
-// Crie em: handlers/selects/select_store_cat_product_.js
+// Substitua em: handlers/selects/select_store_cat_product_.js
 const db = require('../../database.js');
 const generateCategoryProductSelect = require('../../ui/store/categoryProductSelect.js');
+const updateStoreVitrine = require('../../utils/updateStoreVitrine.js'); // <--- IMPORTANTE
 const V2_FLAG = 1 << 15;
 const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
-    customId: 'select_store_cat_product_', // select_store_cat_product_add_5
+    customId: 'select_store_cat_product_',
     async execute(interaction) {
         if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
 
         const parts = interaction.customId.replace('select_store_cat_product_', '').split('_');
-        const mode = parts[0];
+        const mode = parts[0]; // 'add' ou 'remove'
         const categoryId = parts[1];
         const productId = interaction.values[0];
 
         if (productId === 'no_result') return;
 
         try {
-            // 1. Executar Ação
+            // 1. Executar Ação no Banco
             let actionMsg = "";
             if (mode === 'add') {
                 await db.query('UPDATE store_products SET category_id = $1 WHERE id = $2', [categoryId, productId]);
@@ -27,7 +28,14 @@ module.exports = {
                 actionMsg = `🗑️ Produto ID **${productId}** removido da categoria!`;
             }
 
-            // 2. Recarregar lista (Página 0 para simplicidade e feedback visual)
+            // 2. ATUALIZAR VITRINE (Reflete a mudança de categoria)
+            try {
+                await updateStoreVitrine(interaction.client, interaction.guild.id);
+            } catch (err) {
+                console.error("Erro ao atualizar vitrine na categoria:", err);
+            }
+
+            // 3. Recarregar lista
             const ITEMS_PER_PAGE = 25;
             let countQuery, productsQuery;
 
@@ -47,10 +55,9 @@ module.exports = {
 
             const uiComponents = generateCategoryProductSelect(products, 0, totalPages, mode, categoryId);
 
-            // Injetar mensagem de sucesso no topo
             if (uiComponents[0] && uiComponents[0].components && uiComponents[0].components[0]) {
                 const oldContent = uiComponents[0].components[0].content;
-                uiComponents[0].components[0].content = `> ${actionMsg}\n` + oldContent;
+                uiComponents[0].components[0].content = `> ${actionMsg}\n> 🔄 Vitrine atualizada!\n` + oldContent;
             }
 
             await interaction.editReply({
