@@ -8,6 +8,7 @@ module.exports = function generateCategoryManageHub(category, productCount) {
             components: [
                 { type: 10, content: `> **📂 Gerenciar Categoria:** ${category.name}` },
                 { type: 10, content: `> **ID:** \`${category.id}\`\n> **Produtos Vinculados:** ${productCount}` },
+                { type: 10, content: `> **VOCÊ SÓ PODE ADICIONAR 25 PRODUTOS POR CATEGORIA!**`},
                 { type: 14, divider: true, spacing: 2 },
                 {
                     type: 1,
