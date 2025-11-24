@@ -1,22 +1,89 @@
-// Substitua o conteúdo em: ui/store/stockMenu.js
-module.exports = function generateStockMenu(product, stockCount) {
-    return [
+const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+
+module.exports = async (products, page = 0, totalPages = 1, searchTerm = null) => {
+    // Formata os produtos para o Select Menu (Adicionando Emoji e Preço conforme solicitado)
+    const options = products.map(product => ({
+        label: `📦 ${product.name}`,
+        description: `Preço: R$ ${parseFloat(product.price).toFixed(2).replace('.', ',')} | Estoque: ${product.stock || 0}`,
+        value: `store_stock_sel_${product.id}`,
+        emoji: { name: '📦' }
+    }));
+
+    // Se não houver produtos, mostra uma opção de aviso (Select Menu não pode ficar vazio)
+    if (options.length === 0) {
+        options.push({
+            label: 'Nenhum produto encontrado',
+            value: 'no_product',
+            description: 'Tente outra busca ou adicione produtos.',
+            emoji: { name: '🚫' }
+        });
+    }
+
+    // Define os botões de navegação
+    const components = [
         {
-            "type": 17, "accent_color": 15105570,
-            "components": [
-                { "type": 10, "content": `## 🔑 Estoque Real: ${product.name}` },
-                { "type": 10, "content": `> **Produto ID:** \`${product.id}\`\n> **Itens em Estoque (não vendidos):** \`${stockCount}\`` },
-                { "type": 14, "divider": true, "spacing": 2 },
+            type: 1,
+            components: [
                 {
-                    "type": 1, "components": [
-                        { "type": 2, "style": 3, "label": "Adicionar Estoque", "emoji": { "name": "➕" }, "custom_id": `store_add_stock_${product.id}` },
-                        // BOTÃO ALTERADO DE "REMOVER" PARA "EDITAR"
-                        { "type": 2, "style": 1, "label": "Editar Estoque", "emoji": { "name": "✏️" }, "custom_id": `store_edit_stock_${product.id}`, "disabled": stockCount == 0 }
-                    ]
+                    type: 3, // String Select Menu
+                    custom_id: 'select_store_manage_stock',
+                    options: options,
+                    placeholder: 'Selecione um produto para gerenciar...',
+                    min_values: 1,
+                    max_values: 1,
+                    disabled: options[0].value === 'no_product'
+                }
+            ]
+        },
+        {
+            type: 1,
+            components: [
+                {
+                    type: 2, // Button
+                    style: 2, // Secondary
+                    label: '◀ Anterior',
+                    custom_id: `store_stock_page_${page - 1}_${searchTerm ? searchTerm : ''}`,
+                    disabled: page === 0
                 },
-                { "type": 14, "divider": true, "spacing": 1 },
-                { "type": 1, "components": [{ "type": 2, "style": 2, "label": "Voltar", "emoji": { "name": "↩️" }, "custom_id": "store_manage_products" }] }
+                {
+                    type: 2, // Button
+                    style: 1, // Primary
+                    label: `Página ${page + 1}/${totalPages}`,
+                    custom_id: 'store_stock_page_noop',
+                    disabled: true
+                },
+                {
+                    type: 2, // Button
+                    style: 2, // Secondary
+                    label: 'Próximo ▶',
+                    custom_id: `store_stock_page_${page + 1}_${searchTerm ? searchTerm : ''}`,
+                    disabled: page >= totalPages - 1
+                },
+                {
+                    type: 2, // Button
+                    style: 3, // Success
+                    label: '🔍 Pesquisar',
+                    custom_id: 'store_stock_search',
+                    disabled: false
+                }
             ]
         }
     ];
+
+    // Se estiver em modo de busca, adicionar botão para limpar busca
+    if (searchTerm) {
+        components[1].components.push({
+            type: 2,
+            style: 4, // Danger
+            label: 'Limpar Busca',
+            custom_id: 'store_stock_page_0', // Volta para pagina 0 sem termo de busca
+        });
+    }
+
+    return {
+        content: searchTerm 
+            ? `📊 **Gerenciamento de Estoque**\n🔎 Resultados para: \`${searchTerm}\`\nSelecione um produto abaixo para editar.`
+            : `📊 **Gerenciamento de Estoque**\nMostrando produtos ${page * 25 + 1} - ${Math.min((page + 1) * 25, (page * 25) + products.length)}.`,
+        components: components
+    };
 };
