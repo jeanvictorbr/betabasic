@@ -1,11 +1,13 @@
-const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../../database.js');
+const V2_FLAG = 1 << 15;
 const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
     customId: 'modal_store_stock_search',
     async execute(interaction) {
-        await interaction.deferReply({ flags: EPHEMERAL_FLAG });
+        // Resposta nova, usando V2_FLAG para garantir compatibilidade
+        await interaction.deferReply({ flags: V2_FLAG | EPHEMERAL_FLAG });
         
         const query = interaction.fields.getTextInputValue('search_query');
 
@@ -16,8 +18,9 @@ module.exports = {
 
         if (products.length === 0) {
             return interaction.editReply({
-                content: `❌ Nenhum produto encontrado com o termo: **${query}**`,
+                content: null,
                 components: [
+                    { type: 17, components: [{ type: 10, content: `❌ **Nenhum produto encontrado** com o termo: \`${query}\`` }] },
                     new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('store_manage_stock').setLabel('Voltar').setStyle(ButtonStyle.Primary)
                     )
@@ -27,9 +30,9 @@ module.exports = {
 
         const options = products.map(p => {
             const priceVal = parseFloat(p.price);
-            const priceFormatted = isNaN(priceVal) ? "R$ 0,00" : priceVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            const priceFormatted = isNaN(priceVal) ? "0,00" : priceVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             return {
-                label: p.name.substring(0, 100),
+                label: p.name.substring(0, 80),
                 description: `💰 ${priceFormatted} | ID: ${p.id}`,
                 value: p.id.toString(),
                 emoji: { name: "🔎" }
@@ -41,14 +44,16 @@ module.exports = {
             .setPlaceholder(`🔍 Resultados: ${query}`)
             .addOptions(options);
 
-        const embed = new EmbedBuilder()
-            .setColor('#2b2d31')
-            .setTitle('🔍 Resultados da Pesquisa')
-            .setDescription(`Encontrei **${products.length}** produto(s) com o termo "**${query}**".\nSelecione abaixo para gerenciar.`);
-
         await interaction.editReply({
-            embeds: [embed],
+            embeds: [],
             components: [
+                { 
+                    type: 17, 
+                    components: [
+                        { type: 10, content: `## 🔍 Resultados da Pesquisa` },
+                        { type: 10, content: `Encontrei **${products.length}** produto(s) com o termo "**${query}**".\nSelecione abaixo para gerenciar.` }
+                    ] 
+                },
                 new ActionRowBuilder().addComponents(selectMenu),
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('store_manage_stock').setLabel('Voltar para Todos').setStyle(ButtonStyle.Secondary)

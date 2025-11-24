@@ -1,4 +1,4 @@
-const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../../database.js');
 
 module.exports = {
@@ -7,7 +7,6 @@ module.exports = {
         try {
             await interaction.deferUpdate();
 
-            // Extrai página
             const parts = interaction.customId.split('_');
             let page = parseInt(parts[parts.length - 1]);
             if (isNaN(page)) page = 0;
@@ -28,9 +27,9 @@ module.exports = {
 
             const options = displayedProducts.map(p => {
                 const priceVal = parseFloat(p.price);
-                const priceFormatted = isNaN(priceVal) ? "R$ 0,00" : priceVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                const priceFormatted = isNaN(priceVal) ? "0,00" : priceVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
                 return {
-                    label: p.name.substring(0, 100),
+                    label: p.name.substring(0, 80),
                     description: `💰 ${priceFormatted} | ID: ${p.id}`,
                     value: p.id.toString(),
                     emoji: { name: "📦" }
@@ -44,21 +43,22 @@ module.exports = {
 
             const navigationRow = new ActionRowBuilder();
             navigationRow.addComponents(
-                new ButtonBuilder().setCustomId('store_manage_stock_search').setLabel('🔍 Pesquisar').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId(`store_manage_stock_page_${safePage - 1}`).setLabel('◀️').setStyle(ButtonStyle.Primary).setDisabled(safePage === 0),
+                new ButtonBuilder().setCustomId('store_manage_stock_search').setLabel('Pesquisar').setStyle(ButtonStyle.Success).setEmoji('🔍'),
+                new ButtonBuilder().setCustomId(`store_manage_stock_page_${safePage - 1}`).setLabel('Anterior').setStyle(ButtonStyle.Primary).setDisabled(safePage === 0),
                 new ButtonBuilder().setCustomId('store_manage_products').setLabel('Cancelar').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId(`store_manage_stock_page_${safePage + 1}`).setLabel('▶️').setStyle(ButtonStyle.Primary).setDisabled(safePage >= totalPages - 1)
+                new ButtonBuilder().setCustomId(`store_manage_stock_page_${safePage + 1}`).setLabel('Próxima').setStyle(ButtonStyle.Primary).setDisabled(safePage >= totalPages - 1)
             );
 
-            const embed = new EmbedBuilder()
-                .setColor('#2b2d31')
-                .setTitle('📦 Gerenciamento de Estoque')
-                .setDescription(`Selecione um produto abaixo para adicionar ou remover estoque.\n\n📊 **Total de Produtos:** \`${products.length}\`\n📄 **Página:** \`${safePage + 1}/${totalPages}\``)
-                .setFooter({ text: 'Use os botões para navegar ou pesquisar.' });
-
             await interaction.editReply({
-                embeds: [embed],
+                embeds: [], // Garante limpar embeds
                 components: [
+                    { 
+                        type: 17, 
+                        components: [
+                            { type: 10, content: `## 📦 Gerenciamento de Estoque` },
+                            { type: 10, content: `Selecione um produto abaixo para adicionar ou remover estoque.\n> 📊 **Total de Produtos:** \`${products.length}\`\n> 📄 **Página:** \`${safePage + 1}/${totalPages}\`` }
+                        ] 
+                    },
                     new ActionRowBuilder().addComponents(selectMenu), 
                     navigationRow
                 ]
@@ -66,7 +66,6 @@ module.exports = {
 
         } catch (error) {
             console.error('Erro na paginação de estoque:', error);
-            await interaction.followUp({ content: '❌ Erro ao mudar de página.', ephemeral: true });
         }
     }
 };
