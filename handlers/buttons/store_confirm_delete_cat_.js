@@ -1,63 +1,57 @@
 // Crie em: handlers/buttons/store_confirm_delete_cat_.js
 const db = require('../../database.js');
-const generateCategorySelectMenu = require('../../ui/store/categorySelectMenu.js'); // Reaproveita o menu de seleção para voltar
+const generateCategoriesMenu = require('../../ui/store/categoriesMenu.js');
 const V2_FLAG = 1 << 15;
 const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
     customId: 'store_confirm_delete_cat_',
     async execute(interaction) {
+        // Deferir atualização
         if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
 
+        // Extrair ID: store_confirm_delete_cat_123
         const categoryId = interaction.customId.split('_').pop();
 
         try {
-            // 1. Buscar dados da categoria ANTES de deletar (para pegar o ID da mensagem)
+            // 1. Buscar dados antes de deletar (para limpar a vitrine)
             const catResult = await db.query('SELECT * FROM store_categories WHERE id = $1', [categoryId]);
-            const category = catResult.rows[0];
+            
+            if (catResult.rows.length > 0) {
+                const category = catResult.rows[0];
 
-            if (category) {
-                // 2. APAGAR MENSAGEM DA VITRINE (Se existir)
+                // 2. Apagar Mensagem da Vitrine (Se configurada)
                 if (category.vitrine_channel_id && category.vitrine_message_id) {
                     try {
                         const channel = await interaction.guild.channels.fetch(category.vitrine_channel_id).catch(() => null);
                         if (channel) {
-                            const message = await channel.messages.fetch(category.vitrine_message_id).catch(() => null);
-                            if (message) {
-                                await message.delete();
-                                console.log(`[Store] Vitrine da categoria ${category.name} apagada.`);
-                            }
+                            const msg = await channel.messages.fetch(category.vitrine_message_id).catch(() => null);
+                            if (msg) await msg.delete();
                         }
                     } catch (err) {
-                        console.error(`[Store] Erro ao apagar mensagem da vitrine (Cat ID: ${categoryId}):`, err);
-                        // Não impedimos a exclusão do banco se a mensagem falhar (ex: já foi apagada manualmente)
+                        console.error(`[Store] Erro ao limpar vitrine da categoria ${categoryId}:`, err);
                     }
                 }
 
-                // 3. Desvincular produtos (Segurança: evita produtos presos em categoria fantasma)
+                // 3. Desvincular Produtos (Segurança)
+                // Define category_id como NULL para produtos que estavam nesta categoria
                 await db.query('UPDATE store_products SET category_id = NULL WHERE category_id = $1', [categoryId]);
 
-                // 4. DELETAR CATEGORIA DO BANCO
+                // 4. DELETAR A CATEGORIA (Ação Principal)
                 await db.query('DELETE FROM store_categories WHERE id = $1', [categoryId]);
             }
 
-            // 5. Voltar para o menu de remoção (Recarregar lista atualizada)
-            const ITEMS_PER_PAGE = 25;
-            const countRes = await db.query('SELECT COUNT(*) FROM store_categories WHERE guild_id = $1', [interaction.guild.id]);
-            const totalPages = Math.ceil(parseInt(countRes.rows[0].count) / ITEMS_PER_PAGE) || 1;
-
+            // 5. Recarregar o Menu de Gerenciamento de Categorias
             const categories = (await db.query(
-                'SELECT * FROM store_categories WHERE guild_id = $1 ORDER BY id ASC LIMIT $2 OFFSET 0', 
-                [interaction.guild.id, ITEMS_PER_PAGE]
+                'SELECT id, name FROM store_categories WHERE guild_id = $1 ORDER BY id ASC', 
+                [interaction.guild.id]
             )).rows;
 
-            // Importante: Precisamos ter certeza que este arquivo UI existe do passo anterior.
-            // Se não tiver o arquivo separado, usamos a lógica básica aqui mesmo ou o generateCategorySelectMenu que criamos antes.
-            const uiComponents = generateCategorySelectMenu(categories, 0, totalPages, 'remove');
+            const uiComponents = generateCategoriesMenu(categories);
 
-            // Feedback de sucesso
-            if (uiComponents[0]?.components?.[0]) {
-                uiComponents[0].components[0].content = `> ✅ **Categoria Apagada!** (A vitrine também foi removida se existia).\n> Selecione outra para remover:`;
+            // Adiciona mensagem de sucesso no topo
+            if (uiComponents[0] && uiComponents[0].components && uiComponents[0].components[0]) {
+                uiComponents[0].components[0].content = `> ✅ **Sucesso:** Categoria deletada e vitrine limpa!\n` + uiComponents[0].components[0].content;
             }
 
             await interaction.editReply({
@@ -66,7 +60,7 @@ module.exports = {
             });
 
         } catch (error) {
-            console.error("Erro ao confirmar delete categoria:", error);
+            console.error("Erro ao deletar categoria:", error);
             await interaction.followUp({ content: '❌ Erro ao processar exclusão.', ephemeral: true });
         }
     }
