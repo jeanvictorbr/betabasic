@@ -2,13 +2,12 @@
 const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 module.exports = function generateCategoryProductSelect(products, currentPage, totalPages, mode, categoryId, isSearch = false, searchQuery = null) {
-    // mode: 'add', 'remove' ou 'edit'
     
     if (!products || !Array.isArray(products)) products = [];
     currentPage = parseInt(currentPage) || 0;
     totalPages = parseInt(totalPages) || 1;
 
-    // 1. Configuração Visual baseada no Modo
+    // 1. Configuração Visual e IDs
     let placeholder, selectId, emojiIcon, actionText;
 
     if (mode === 'add') {
@@ -22,9 +21,11 @@ module.exports = function generateCategoryProductSelect(products, currentPage, t
         emojiIcon = '📤';
         actionText = 'REMOVER';
     } else {
-        // MODO EDIT: Reaproveita o handler de edição global!
-        selectId = `select_store_edit_product`; 
-        placeholder = 'Selecione para EDITAR DETALHES...';
+        // MODO EDIT:
+        // AQUI ESTÁ O TRUQUE: Usamos um ID novo 'select_store_cat_edit_' que carrega o ID da categoria.
+        // Isso diferencia este menu do menu geral de produtos.
+        selectId = `select_store_cat_edit_${categoryId}`; 
+        placeholder = 'Selecione para EDITAR...';
         emojiIcon = '📝';
         actionText = 'EDITAR';
     }
@@ -73,7 +74,6 @@ module.exports = function generateCategoryProductSelect(products, currentPage, t
     }
 
     // 4. Controles
-    // Botão de voltar retorna para o Hub da Categoria
     const controlButtons = [
         new ButtonBuilder().setCustomId(`store_cat_search_${mode}_${categoryId}`).setLabel('Pesquisar').setEmoji('🔍').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId(`store_manage_category_products_${categoryId}`).setLabel('Voltar').setStyle(ButtonStyle.Danger)
@@ -84,7 +84,6 @@ module.exports = function generateCategoryProductSelect(products, currentPage, t
     rows.push(new ActionRowBuilder().addComponents(controlButtons));
 
     const time = new Date().toLocaleTimeString('pt-BR');
-    
     let title = `> **📂 Gerenciando Categoria** | ${actionText}`;
     
     return [
