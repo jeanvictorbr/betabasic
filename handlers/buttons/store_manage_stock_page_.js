@@ -1,76 +1,58 @@
-// Crie em: handlers/buttons/store_manage_stock_page_.js
+// Substitua em: handlers/buttons/store_manage_stock_page_.js
 const db = require('../../database.js');
 const generateManageStockSelectMenu = require('../../ui/store/manageStockSelectMenu.js');
 
-// Flags padrão do projeto
-const V2_FLAG = 1 << 15;
-const EPHEMERAL_FLAG = 1 << 6;
-
 module.exports = {
-    // O Index.js vai rotear qualquer coisa que comece com isso
+    // O Index vai capturar qualquer ID que comece com isso
     customId: 'store_manage_stock_page_',
     
     async execute(interaction) {
-        // Garante deferimento apenas se ainda não foi feito
-        if (!interaction.deferred && !interaction.replied) {
-            await interaction.deferUpdate().catch(() => {});
-        }
-
         try {
-            // 1. Extração Segura da Página
-            // Remove o prefixo fixo para pegar apenas o número, evitando erros com split('_')
-            const pageStr = interaction.customId.replace('store_manage_stock_page_', '');
-            let page = parseInt(pageStr);
+            // 1. Descobrir qual página o usuário quer
+            // O ID do botão vem como "store_manage_stock_page_1", "store_manage_stock_page_2", etc.
+            // Removemos o texto para pegar só o número.
+            const targetPageStr = interaction.customId.replace('store_manage_stock_page_', '');
+            let targetPage = parseInt(targetPageStr);
 
-            if (isNaN(page) || page < 0) page = 0; // Fallback de segurança
+            // Segurança básica
+            if (isNaN(targetPage) || targetPage < 0) targetPage = 0;
 
             const ITEMS_PER_PAGE = 25;
+            const offset = targetPage * ITEMS_PER_PAGE; // Ex: Pág 1 * 25 = Pula 25 itens (pega do 26 ao 50)
 
-            // 2. Contagem Total (Essencial para calcular limites)
-            const countResult = await db.query('SELECT COUNT(*) FROM store_products WHERE guild_id = $1', [interaction.guild.id]);
+            // 2. Contar total de itens para saber quantas páginas existem
+            const countResult = await db.query('SELECT COUNT(*) as count FROM store_products WHERE guild_id = $1', [interaction.guild.id]);
             const totalItems = parseInt(countResult.rows[0].count || 0);
             
-            // Calcula total de páginas
-            const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
+            // Calcula total de páginas (ex: 30 itens / 25 = 1.2 -> teto é 2 páginas)
+            let totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+            if (totalPages < 1) totalPages = 1;
 
-            // 3. Correção de Limites (Se o usuário clicar rápido e a página não existir mais)
-            if (page >= totalPages) page = totalPages - 1;
-            if (page < 0) page = 0;
+            // Se o usuário tentar ir para uma página que não existe mais (ex: apagou produtos), joga para a última
+            if (targetPage >= totalPages) targetPage = totalPages - 1;
 
-            const offset = page * ITEMS_PER_PAGE;
+            // 3. Buscar a NOVA LEVA de produtos
+            // A ordem OBRIGATORIAMENTE deve ser a mesma sempre (ORDER BY id) para a paginação funcionar
+            const products = (await db.query(
+                'SELECT id, name, price FROM store_products WHERE guild_id = $1 ORDER BY id ASC LIMIT $2 OFFSET $3', 
+                [interaction.guild.id, ITEMS_PER_PAGE, offset]
+            )).rows;
 
-            // 4. Busca Otimizada dos Produtos
-            // Ordenação por ID garante consistência entre páginas
-            const productsQuery = `
-                SELECT id, name, price 
-                FROM store_products 
-                WHERE guild_id = $1 
-                ORDER BY id ASC 
-                LIMIT $2 OFFSET $3
-            `;
-            
-            const products = (await db.query(productsQuery, [interaction.guild.id, ITEMS_PER_PAGE, offset])).rows;
+            // 4. Gerar a nova interface
+            const uiComponents = generateManageStockSelectMenu(products, targetPage, totalPages, false);
 
-            // 5. Geração da UI
-            const uiComponents = generateManageStockSelectMenu(products, page, totalPages, false);
-
-            // 6. Atualização da Mensagem
-            await interaction.editReply({
-                components: uiComponents,
-                flags: V2_FLAG | EPHEMERAL_FLAG
+            // 5. ATUALIZAR a mensagem (Mágica aqui: 'update' é mais suave que 'editReply' para botões)
+            await interaction.update({
+                components: uiComponents
+                // Não precisamos reenviar as flags se a mensagem já for Ephemeral, mas por segurança o update mantém o estado.
             });
 
         } catch (error) {
-            console.error("Erro no manipulador de paginação de estoque:", error);
-            // Tenta recuperar mostrando a primeira página em caso de erro crítico
-            await interaction.editReply({
-                content: `> ⚠️ Ocorreu um erro ao mudar de página. Voltando ao início...`,
-                components: [], 
-            }).catch(() => {});
-            
-            // Opcional: Chamar o handler inicial para resetar
-            const initialHandler = require('./store_manage_stock.js');
-            if(initialHandler) await initialHandler.execute(interaction).catch(() => {});
+            console.error("Erro ao paginar estoque:", error);
+            // Se der erro crítico, tenta avisar sem quebrar tudo
+            if (!interaction.replied) {
+                await interaction.reply({ content: '⚠️ Erro ao mudar de página. Tente fechar e abrir o menu novamente.', ephemeral: true });
+            }
         }
     }
 };

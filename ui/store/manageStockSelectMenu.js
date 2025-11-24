@@ -1,23 +1,15 @@
 // Substitua em: ui/store/manageStockSelectMenu.js
 const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-/**
- * Gera o menu de seleção de produtos para gestão de estoque com paginação robusta.
- * @param {Array} products - Array de produtos da página atual.
- * @param {number} currentPage - Página atual (0-indexado).
- * @param {number} totalPages - Total de páginas calculado.
- * @param {boolean} isSearch - Se é modo de busca (desativa paginação).
- * @param {string|null} searchQuery - Termo buscado.
- */
 module.exports = function generateManageStockSelectMenu(products, currentPage, totalPages, isSearch = false, searchQuery = null) {
     // Garante que products é um array
     if (!products || !Array.isArray(products)) products = [];
 
-    // 1. Construir as opções do Menu
+    // 1. Formatar Opções do Menu
     const options = products.map(p => {
-        // Formatação segura do preço
         let priceFormatted = "R$ 0,00";
         try {
+            // Tenta formatar, se falhar usa o valor bruto
             priceFormatted = parseFloat(p.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         } catch (e) {
             priceFormatted = `R$ ${p.price}`;
@@ -25,43 +17,41 @@ module.exports = function generateManageStockSelectMenu(products, currentPage, t
         
         return {
             label: p.name ? p.name.substring(0, 100) : 'Produto Sem Nome',
-            description: `ID: ${p.id} | 💰 ${priceFormatted} | Clique para gerir`,
+            description: `ID: ${p.id} | 💰 ${priceFormatted} | Gerir Estoque`,
             value: p.id.toString(),
             emoji: '📦'
         };
     });
 
-    // Tratamento para lista vazia
-    let placeholderText = `Selecione um produto (Pág ${currentPage + 1}/${totalPages > 0 ? totalPages : 1})`;
+    // Placeholder Dinâmico (Ajuda a ver que a página mudou)
+    let placeholderText = `📖 Página ${currentPage + 1} de ${totalPages} - Selecione um produto...`;
+    
+    // Se não houver produtos na página (erro ou lista vazia)
     if (options.length === 0) {
         options.push({
-            label: 'Nenhum produto encontrado',
-            description: 'Não há itens para exibir nesta página.',
+            label: 'Nenhum produto nesta página',
+            description: 'Volte para a página anterior.',
             value: 'no_result',
             emoji: '🚫'
         });
-        placeholderText = "Nenhum produto disponível";
+        placeholderText = "🚫 Lista vazia nesta página";
     }
 
-    // 2. Criar o Select Menu
+    // 2. Criar o Menu
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('select_store_manage_stock')
-        .setPlaceholder(isSearch ? `🔎 Busca: "${searchQuery}"` : placeholderText)
+        .setPlaceholder(isSearch ? `🔎 Resultados para: "${searchQuery}"` : placeholderText)
         .addOptions(options)
         .setDisabled(options[0].value === 'no_result');
 
-    // 3. Lógica dos Botões de Navegação
-    // Desativa se for a primeira página ou se for uma busca
-    const prevDisabled = currentPage <= 0 || isSearch;
-    // Desativa se for a última página, se não tiver páginas, ou se for uma busca
-    const nextDisabled = currentPage >= (totalPages - 1) || totalPages === 0 || isSearch;
-
+    // 3. Botões de Navegação (Lógica corrigida)
+    // Desativa "Anterior" se for a primeira página
     const btnPrev = new ButtonBuilder()
-        .setCustomId(`store_manage_stock_page_${currentPage - 1}`) // ID Dinâmico
+        .setCustomId(`store_manage_stock_page_${currentPage - 1}`) 
         .setLabel('Anterior')
         .setEmoji('⬅️')
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(prevDisabled);
+        .setDisabled(currentPage <= 0 || isSearch);
 
     const btnSearch = new ButtonBuilder()
         .setCustomId('store_manage_stock_search')
@@ -69,26 +59,27 @@ module.exports = function generateManageStockSelectMenu(products, currentPage, t
         .setEmoji('🔍')
         .setStyle(ButtonStyle.Primary);
 
+    // Desativa "Próximo" se for a última página
     const btnNext = new ButtonBuilder()
-        .setCustomId(`store_manage_stock_page_${currentPage + 1}`) // ID Dinâmico
+        .setCustomId(`store_manage_stock_page_${currentPage + 1}`)
         .setLabel('Próximo')
         .setEmoji('➡️')
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(nextDisabled);
+        .setDisabled(currentPage >= (totalPages - 1) || isSearch);
 
     const btnCancel = new ButtonBuilder()
-        .setCustomId('store_manage_products')
-        .setLabel(isSearch ? 'Limpar Busca / Voltar' : 'Voltar ao Menu')
+        .setCustomId('store_manage_products') // Volta para o menu principal de produtos
+        .setLabel('Voltar / Sair')
         .setStyle(ButtonStyle.Danger);
 
-    // 4. Montagem das Rows
+    // 4. Montar Rows
     const components = [
         new ActionRowBuilder().addComponents(selectMenu),
         new ActionRowBuilder().addComponents(btnPrev, btnSearch, btnNext),
         new ActionRowBuilder().addComponents(btnCancel)
     ];
 
-    // 5. Retorno da Estrutura V2
+    // 5. Retorno V2
     return [
         {
             type: 17,
@@ -96,8 +87,8 @@ module.exports = function generateManageStockSelectMenu(products, currentPage, t
                 { 
                     type: 10, 
                     content: isSearch 
-                        ? `> **🔍 Resultado da Busca:** Exibindo produtos para \`${searchQuery}\`.`
-                        : `> **📦 Gestão de Estoque:** Navegue pelas páginas para encontrar o produto.\n> **Página:** ${currentPage + 1} de ${totalPages > 0 ? totalPages : 1}` 
+                        ? `> **🔍 Resultado da Busca:** Encontrados ${products.length} produtos para \`${searchQuery}\`.`
+                        : `> **📦 Gestão de Estoque Real**\n> Utilize o menu abaixo para selecionar um produto e gerenciar suas chaves/itens entregues automaticamente.\n> \n> **Total de Páginas:** ${totalPages} (Exibindo ${products.length} itens)` 
                 }
             ]
         },
