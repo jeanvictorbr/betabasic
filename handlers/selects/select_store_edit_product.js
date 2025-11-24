@@ -1,51 +1,40 @@
-// Substitua o conteúdo em: handlers/selects/select_store_edit_product.js
+// Substitua em: handlers/selects/select_store_edit_product.js
 const db = require('../../database.js');
-const { ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { EPHEMERAL_FLAG } = require('../../utils/constants.js');
+const generateProductEditPanel = require('../../ui/store/productEditPanel.js');
+const V2_FLAG = 1 << 15;
+const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
     customId: 'select_store_edit_product',
     async execute(interaction) {
-        
+        // Interações de select menu precisam de update ou deferUpdate
+        if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+
         const productId = interaction.values[0];
-        
-        const productRes = await db.query('SELECT * FROM store_products WHERE id = $1 AND guild_id = $2', [productId, interaction.guild.id]);
-        
-        if (productRes.rows.length === 0) {
-            return interaction.reply({ content: '❌ Este produto não foi encontrado.', flags: EPHEMERAL_FLAG });
+
+        // Se o usuário selecionou "no_result", ignoramos
+        if (productId === 'no_result') return;
+
+        try {
+            // Buscar dados atualizados do produto
+            const product = (await db.query('SELECT * FROM store_products WHERE id = $1', [productId])).rows[0];
+
+            if (!product) {
+                return interaction.followUp({ content: '❌ Produto não encontrado (pode ter sido excluído).', ephemeral: true });
+            }
+
+            // Gerar o Painel de Edição
+            const uiComponents = generateProductEditPanel(product);
+
+            // Atualizar a mensagem para mostrar o painel
+            await interaction.editReply({
+                components: uiComponents,
+                flags: V2_FLAG | EPHEMERAL_FLAG
+            });
+
+        } catch (error) {
+            console.error("Erro ao selecionar produto para editar:", error);
+            await interaction.followUp({ content: '❌ Erro ao carregar produto.', ephemeral: true });
         }
-        
-        const product = productRes.rows[0];
-
-        const modal = new ModalBuilder()
-            .setCustomId(`modal_store_edit_product_${productId}`) // O ID do modal é dinâmico
-            .setTitle('Editar Produto');
-
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('input_name').setLabel("Nome do Produto").setStyle(TextInputStyle.Short).setValue(product.name).setRequired(true)
-            ),
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('input_desc').setLabel("Descrição").setStyle(TextInputStyle.Paragraph).setValue(product.description || '').setRequired(false)
-            ),
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('input_price').setLabel("Preço (Ex: 19.99)").setStyle(TextInputStyle.Short).setValue(product.price.toString()).setRequired(true)
-            ),
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('input_stock_type').setLabel("Tipo de Estoque ('REAL' ou 'GHOST')").setStyle(TextInputStyle.Short).setValue(product.stock_type).setRequired(true)
-            ),
-            // --- CAMPO ADICIONADO AQUI ---
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('input_role_duration')
-                    .setLabel("Cargo Temp. (Dias) - Opcional")
-                    .setStyle(TextInputStyle.Short)
-                    .setPlaceholder('Ex: 30 (limpe para remover)')
-                    .setValue(product.role_duration_days ? product.role_duration_days.toString() : '') // Preenche com o valor atual
-                    .setRequired(false)
-            )
-            // --- FIM DA ADIÇÃO ---
-        );
-        
-        await interaction.showModal(modal);
     }
 };
