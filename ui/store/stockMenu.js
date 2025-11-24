@@ -1,7 +1,7 @@
 const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 module.exports = async (products, page = 0, totalPages = 1, searchTerm = null) => {
-    // Formata os produtos para o Select Menu (Adicionando Emoji e Preço conforme solicitado)
+    // Formata os produtos
     const options = products.map(product => ({
         label: `📦 ${product.name}`,
         description: `Preço: R$ ${parseFloat(product.price).toFixed(2).replace('.', ',')} | Estoque: ${product.stock || 0}`,
@@ -9,7 +9,6 @@ module.exports = async (products, page = 0, totalPages = 1, searchTerm = null) =
         emoji: { name: '📦' }
     }));
 
-    // Se não houver produtos, mostra uma opção de aviso (Select Menu não pode ficar vazio)
     if (options.length === 0) {
         options.push({
             label: 'Nenhum produto encontrado',
@@ -19,7 +18,7 @@ module.exports = async (products, page = 0, totalPages = 1, searchTerm = null) =
         });
     }
 
-    // Define os botões de navegação
+    // Componentes
     const components = [
         {
             type: 1,
@@ -39,28 +38,28 @@ module.exports = async (products, page = 0, totalPages = 1, searchTerm = null) =
             type: 1,
             components: [
                 {
-                    type: 2, // Button
+                    type: 2, 
                     style: 2, // Secondary
                     label: '◀ Anterior',
                     custom_id: `store_stock_page_${page - 1}_${searchTerm ? searchTerm : ''}`,
                     disabled: page === 0
                 },
                 {
-                    type: 2, // Button
+                    type: 2,
                     style: 1, // Primary
                     label: `Página ${page + 1}/${totalPages}`,
                     custom_id: 'store_stock_page_noop',
                     disabled: true
                 },
                 {
-                    type: 2, // Button
+                    type: 2, 
                     style: 2, // Secondary
                     label: 'Próximo ▶',
                     custom_id: `store_stock_page_${page + 1}_${searchTerm ? searchTerm : ''}`,
                     disabled: page >= totalPages - 1
                 },
                 {
-                    type: 2, // Button
+                    type: 2, 
                     style: 3, // Success
                     label: '🔍 Pesquisar',
                     custom_id: 'store_stock_search',
@@ -70,20 +69,26 @@ module.exports = async (products, page = 0, totalPages = 1, searchTerm = null) =
         }
     ];
 
-    // Se estiver em modo de busca, adicionar botão para limpar busca
     if (searchTerm) {
         components[1].components.push({
             type: 2,
             style: 4, // Danger
             label: 'Limpar Busca',
-            custom_id: 'store_stock_page_0', // Volta para pagina 0 sem termo de busca
+            custom_id: 'store_stock_page_0',
         });
     }
 
+    // Criação do Embed Manual (JSON) para substituir o 'content'
+    const embed = {
+        title: '📊 Gerenciamento de Estoque',
+        description: searchTerm 
+            ? `🔎 Resultados para: \`${searchTerm}\`\nSelecione um produto abaixo para editar.`
+            : `Mostrando produtos **${page * 25 + 1}** a **${Math.min((page + 1) * 25, (page * 25) + products.length)}**.`,
+        color: 0x2B2D31 // Cor escura padrão do Discord
+    };
+
     return {
-        content: searchTerm 
-            ? `📊 **Gerenciamento de Estoque**\n🔎 Resultados para: \`${searchTerm}\`\nSelecione um produto abaixo para editar.`
-            : `📊 **Gerenciamento de Estoque**\nMostrando produtos ${page * 25 + 1} - ${Math.min((page + 1) * 25, (page * 25) + products.length)}.`,
+        embeds: [embed],
         components: components
     };
 };

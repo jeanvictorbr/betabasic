@@ -1,33 +1,60 @@
-// File: handlers/buttons/store_myorders_page_.js
 const db = require('../../database.js');
-const generateCustomerOrdersDashboard = require('../../ui/store/customerOrdersDashboard.js');
-const { V2_FLAG, EPHEMERAL_FLAG } = require('../../utils/constants.js');
+const stockMenu = require('../../ui/store/stockMenu.js');
+
+const V2_FLAG = 1 << 15;
+const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
-    customId: 'store_myorders_page_',
+    customId: 'store_stock_page_',
     async execute(interaction) {
         await interaction.deferUpdate();
 
-        // Extrai a página do ID (store_myorders_page_1)
-        const page = parseInt(interaction.customId.split('_').pop());
+        const guildId = interaction.guild.id;
+        
+        const parts = interaction.customId.split('_');
+        const page = parseInt(parts[3]);
+        const searchTerm = parts.slice(4).join('_') || null;
 
-        // (Repete a lógica de busca para garantir dados frescos)
-        const statsQuery = await db.query(
-            `SELECT COUNT(*) as count, SUM(total_amount) as total FROM store_sales_log WHERE guild_id = $1 AND user_id = $2`,
-            [interaction.guild.id, interaction.user.id]
-        );
-        const totalOrders = parseInt(statsQuery.rows[0].count || 0);
-        const totalSpent = parseFloat(statsQuery.rows[0].total || 0);
+        let query = '';
+        let params = [guildId, 25, page * 25];
+        let countQuery = '';
+        let countParams = [guildId];
 
-        const ordersQuery = await db.query(
-            `SELECT * FROM store_sales_log WHERE guild_id = $1 AND user_id = $2 ORDER BY created_at DESC`,
-            [interaction.guild.id, interaction.user.id]
-        );
+        if (searchTerm) {
+            query = `
+                SELECT id, name, price, stock 
+                FROM store_products 
+                WHERE guild_id = $1 AND name ILIKE $4
+                ORDER BY id DESC 
+                LIMIT $2 OFFSET $3
+            `;
+            params.push(`%${searchTerm}%`);
 
-        const dashboard = generateCustomerOrdersDashboard(interaction, ordersQuery.rows, page, totalOrders, totalSpent);
-        const payload = dashboard[0];
-        payload.flags = V2_FLAG | EPHEMERAL_FLAG;
+            countQuery = 'SELECT COUNT(*) FROM store_products WHERE guild_id = $1 AND name ILIKE $2';
+            countParams.push(`%${searchTerm}%`);
+        } else {
+            query = `
+                SELECT id, name, price, stock 
+                FROM store_products 
+                WHERE guild_id = $1 
+                ORDER BY id DESC 
+                LIMIT $2 OFFSET $3
+            `;
+            countQuery = 'SELECT COUNT(*) FROM store_products WHERE guild_id = $1';
+        }
 
-        await interaction.editReply(payload);
+        const countRes = await db.query(countQuery, countParams);
+        const totalProducts = parseInt(countRes.rows[0].count);
+        const totalPages = Math.ceil(totalProducts / 25) || 1;
+
+        const products = await db.query(query, params);
+
+        const payload = await stockMenu(products.rows, page, totalPages, searchTerm);
+
+        await interaction.editReply({
+            embeds: payload.embeds,
+            components: payload.components,
+            flags: V2_FLAG | EPHEMERAL_FLAG
+        });
     }
 };
