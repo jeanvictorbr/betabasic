@@ -1,41 +1,44 @@
-// handlers/buttons/dev_manage_guilds.js
-const createDevGuildsMenu = require('../../ui/devPanel/devGuildsMenu.js');
+// handlers/commands/devpanel.js
+const generateDevMainMenu = require('../../ui/devPanel/mainMenu.js');
 const db = require('../../database.js');
+const V2_FLAG = 1 << 15;
+const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
-    customId: 'dev_manage_guilds',
+    customId: 'devpanel',
     async execute(interaction) {
-        // Padrão: Página 0, Ordenação por Nome
-        const page = 0;
-        const sortType = 'name';
-
-        let guilds = Array.from(interaction.client.guilds.cache.values());
-        
-        // Ordenação padrão por nome
-        guilds.sort((a, b) => a.name.localeCompare(b.name));
-
-        const itemsPerPage = 5;
-        const totalPages = Math.ceil(guilds.length / itemsPerPage);
-        const currentGuilds = guilds.slice(0, itemsPerPage);
-
-        // --- LÓGICA DE BUSCA DE DADOS (Igual à paginação) ---
-        const guildIds = currentGuilds.map(g => g.id);
-        let guildSettingsMap = new Map();
-        
-        if (guildIds.length > 0) {
-            try {
-                const res = await db.query('SELECT * FROM guild_settings WHERE guild_id = ANY($1)', [guildIds]);
-                res.rows.forEach(row => {
-                    guildSettingsMap.set(row.guild_id, row);
-                });
-            } catch (error) {
-                console.error("[DevPanel] Erro ao buscar dados iniciais:", error);
-            }
+        // Segurança: Apenas o desenvolvedor pode usar
+        if (interaction.user.id !== process.env.DEV_USER_ID) {
+            return interaction.reply({ content: '❌ Você não tem permissão para usar este comando.', ephemeral: true });
         }
-        // -----------------------------------------------------
-
-        const payload = createDevGuildsMenu(interaction, currentGuilds, page, totalPages, sortType, guildSettingsMap);
         
-        await interaction.update(payload);
+        // CORREÇÃO DO ERRO: Diferencia o "defer" corretamente
+        if (interaction.isButton()) {
+            await interaction.deferUpdate();
+        } else {
+            // Comandos de barra (/) NÃO possuem deferUpdate, apenas deferReply
+            await interaction.deferReply({ ephemeral: true });
+        }
+        
+        // Garante que o status do bot exista
+        await db.query("INSERT INTO bot_status (status_key, ai_services_enabled) VALUES ('main', true) ON CONFLICT (status_key) DO NOTHING");
+        const botStatus = (await db.query("SELECT * FROM bot_status WHERE status_key = 'main'")).rows[0];
+        
+        const totalGuilds = interaction.client.guilds.cache.size;
+        const totalMembers = interaction.client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
+
+        // Busca uso de tokens do dia (Feature nova que você pediu)
+        const dailyTokenResult = await db.query(
+            "SELECT SUM(total_tokens) as total FROM ai_usage_logs WHERE created_at >= NOW()::date"
+        );
+        const dailyTokenUsage = parseInt(dailyTokenResult.rows[0]?.total || '0', 10);
+
+        const payload = {
+            components: generateDevMainMenu(botStatus, { totalGuilds, totalMembers }, dailyTokenUsage),
+            flags: V2_FLAG | EPHEMERAL_FLAG,
+        };
+
+        // CORREÇÃO DO ERRO: Usa sempre editReply após o defer
+        await interaction.editReply(payload);
     }
 };
