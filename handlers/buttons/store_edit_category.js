@@ -1,28 +1,30 @@
-// Substitua em: handlers/buttons/store_edit_category.js
+// Crie em: handlers/buttons/store_edit_category.js
+const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../../database.js');
-const generateCategorySelectMenu = require('../../ui/store/categorySelectMenu.js');
 const V2_FLAG = 1 << 15;
 const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
     customId: 'store_edit_category',
     async execute(interaction) {
-        if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+        await interaction.deferUpdate();
+        const categories = (await db.query('SELECT id, name FROM store_categories WHERE guild_id = $1 ORDER BY name ASC', [interaction.guild.id])).rows;
 
-        const ITEMS_PER_PAGE = 25;
-        
-        const countRes = await db.query('SELECT COUNT(*) FROM store_categories WHERE guild_id = $1', [interaction.guild.id]);
-        const totalPages = Math.ceil(parseInt(countRes.rows[0].count) / ITEMS_PER_PAGE) || 1;
+        const options = categories.map(c => ({
+            label: c.name,
+            description: `ID da Categoria: ${c.id}`,
+            value: c.id.toString(),
+        }));
 
-        const categories = (await db.query(
-            'SELECT * FROM store_categories WHERE guild_id = $1 ORDER BY id ASC LIMIT $2 OFFSET 0', 
-            [interaction.guild.id, ITEMS_PER_PAGE]
-        )).rows;
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('select_store_edit_category')
+            .setPlaceholder('Selecione a categoria que deseja editar')
+            .addOptions(options);
 
-        const uiComponents = generateCategorySelectMenu(categories, 0, totalPages, 'edit');
+        const cancelButton = new ButtonBuilder().setCustomId('store_manage_categories').setLabel('Cancelar').setStyle(ButtonStyle.Secondary);
 
         await interaction.editReply({
-            components: uiComponents,
+            components: [new ActionRowBuilder().addComponents(selectMenu), new ActionRowBuilder().addComponents(cancelButton)],
             flags: V2_FLAG | EPHEMERAL_FLAG
         });
     }
