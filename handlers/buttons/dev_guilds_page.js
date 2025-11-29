@@ -1,30 +1,37 @@
-const devPanelUtils = require('../../utils/devPanelUtils.js');
-const generateDevGuildsMenu = require('../../ui/devPanel/devGuildsMenu.js');
-const V2_FLAG = 1 << 15;
-const EPHEMERAL_FLAG = 1 << 6;
+const { SelectMenuBuilder, ActionRowBuilder } = require('discord.js'); // Usado internamente se precisar
+const devGuildsMenu = require('../../ui/devPanel/devGuildsMenu');
 
 module.exports = {
-    // Captura: dev_guilds_page_NUMERO_TIPO
-    customId: 'dev_guilds_page_',
-    async execute(interaction) {
-        await interaction.deferUpdate();
-
-        // Parse do ID: dev_guilds_page_1_inactive
-        const parts = interaction.customId.split('_');
-        // parts[0]=dev, [1]=guilds, [2]=page, [3]=numero, [4]=sortType (opcional)
-        
-        const page = parseInt(parts[3]);
-        const sortType = parts[4] || 'default'; // Se não tiver, usa default
-
+    customId: 'dev_guilds_page',
+    run: async (client, interaction) => {
         try {
-            const { allGuildData, totals } = await devPanelUtils.getAndPrepareGuildData(interaction.client, sortType);
+            // Pega todas as guildas do cache
+            let guilds = Array.from(client.guilds.cache.values());
+
+            // --- MELHORIA DE FAXINA ---
+            // Ordena por número de membros (Crescente: Menos membros primeiro)
+            // Assim as guildas "fantasmas" aparecem no topo da página 1.
+            guilds.sort((a, b) => a.memberCount - b.memberCount);
+            // --------------------------
+
+            // Lógica de paginação simples (se tiver info no customId, ex: dev_guilds_page_2)
+            let page = 0;
+            const parts = interaction.customId.split('_');
+            if (parts.length > 3) {
+                page = parseInt(parts[3]) || 0;
+            }
+
+            const ui = devGuildsMenu(guilds, page);
             
-            await interaction.editReply({
-                components: generateDevGuildsMenu(allGuildData, page, totals, sortType),
-                flags: V2_FLAG | EPHEMERAL_FLAG,
-            });
-        } catch (error) {
-            console.error('Erro na paginação:', error);
+            if (interaction.isMessageComponent()) {
+                await interaction.update(ui);
+            } else {
+                await interaction.reply(ui);
+            }
+
+        } catch (err) {
+            console.error(err);
+            // Fallback erro simples
         }
     }
 };
