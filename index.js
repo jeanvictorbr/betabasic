@@ -71,6 +71,16 @@ function encrypt(text) {
         return null;
     }
 }
+
+// --- FUNÇÃO SEGURA PARA COR ---
+function resolveSafeColor(colorInput) {
+    // Regex para verificar Hex de 3 ou 6 digitos (com # opcional)
+    const hexRegex = /^#?([0-9A-F]{3}|[0-9A-F]{6})$/i;
+    if (colorInput && hexRegex.test(colorInput)) {
+        return colorInput.startsWith('#') ? colorInput : `#${colorInput}`;
+    }
+    return '#2ECC71'; // Cor padrão segura (Verde)
+}
 // -------------------------------------------
 
 const commandUsage = new Map();
@@ -104,6 +114,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
     const finalTitle = replacePlaceholders(config.title || '👋 Bem-vindo(a) ao {server.name}!');
     const finalDescription = replacePlaceholders(config.description || 'Estamos felizes em ter você aqui, {user.mention}! Esperamos que você se divirta e faça novas amizades.');
     const finalFooter = isPremium && config.footer_text ? replacePlaceholders(config.footer_text) : 'Junte-se à nossa comunidade!';
+    const safeColor = resolveSafeColor(config.color);
     const welcomeEmbed = new EmbedBuilder()
         .setColor(config.color || '#2ECC71')
         .setTitle(finalTitle)
@@ -1071,6 +1082,23 @@ client.on(Events.MessageCreate, async (message) => {
             await message.reply(aiResponse);
         }
     }
+
+    // Adicione isso no final do index.js
+process.on('unhandledRejection', (reason, promise) => {
+    console.log(' [ANTI-CRASH] Unhandled Rejection:', reason);
+    // Se o erro for de Rate Limit, logar especificamente
+    if (reason?.code === 429) {
+        console.log(' [PERIGO] O bot está atingindo o Rate Limit do Discord! Verifique loops rápidos.');
+    }
+});
+
+process.on('uncaughtException', (err) => {
+    console.log(' [ANTI-CRASH] Uncaught Exception:', err);
+});
+
+process.on('uncaughtExceptionMonitor', (err, origin) => {
+    console.log(' [ANTI-CRASH] Uncaught Exception Monitor:', err, origin);
+});
     // --- FIM DA NOVA LÓGICA DO ASSISTENTE DE TICKET ---
 });
 client.login(process.env.DISCORD_TOKEN);

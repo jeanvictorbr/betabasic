@@ -66,6 +66,11 @@ module.exports = function generateCategoriesMenu(categories = [], page = 0) {
                 {
                     "type": 1, "components": [
                         { "type": 2, "style": 3, "label": "Adicionar Categoria", "emoji": { "name": "➕" }, "custom_id": "store_add_category" },
+
+
+                        { type: 2, style: 1, label: "Editar Categoria", emoji: { name: "✏️" }, custom_id: "store_edit_category", disabled: categories.length === 0 }, // Botão REMOVER (Novo) 
+                        { type: 2, style: 4,  label: "Remover Categoria", emoji: { name: "🗑️" }, custom_id: "store_remove_category", disabled:  true },
+
                         { "type": 2, "style": 2, "label": "Voltar ao Menu", "emoji": { "name": "↩️" }, "custom_id": "open_store_menu" }
                     ]
                 }

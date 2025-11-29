@@ -1,64 +1,115 @@
-// Substitua o conteúdo em: ui/devPanel/devGuildManageMenu.js
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { V2_FLAG, EPHEMERAL_FLAG } = require('../../utils/constants');
 
-module.exports = function generateDevGuildManageMenu(guild, settings) {
-    const activeFeatures = settings.enabled_features ? settings.enabled_features.split(',') : [];
+module.exports = (guild, data) => {
+    // data contém: ownerName, activeModulesList, guildSettings, joinedDays, healthStatus
 
-    const isBotEnabledInGuild = settings?.bot_enabled_in_guild !== false;
-    const toggleBotStatusButton = isBotEnabledInGuild
-        ? { label: "Bot na Guild: Ativado", style: ButtonStyle.Success, emoji: "✅" }
-        : { label: "Bot na Guild: Desativado", style: ButtonStyle.Danger, emoji: "❌" };
+    // Formata a lista de módulos
+    const modulesString = data.activeModulesList.length > 0 
+        ? data.activeModulesList.join('\n') 
+        : "⚠️ *Nenhum módulo ativado.*";
 
-    const isAiDisabledByDev = settings?.ai_services_disabled_by_dev;
-    const toggleAiButton = isAiDisabledByDev
-        ? { label: "IA na Guild: Desativada", style: ButtonStyle.Danger, emoji: "❌" }
-        : { label: "IA na Guild: Ativada", style: ButtonStyle.Success, emoji: "✅" };
+    // Ícone da guilda ou padrão
+    const iconUrl = guild.iconURL({ dynamic: true, size: 256 }) || "https://cdn.discordapp.com/embed/avatars/0.png";
 
-    const quickActions = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`dev_guild_force_leave_${guild.id}`).setLabel("Forçar Saída").setStyle(ButtonStyle.Danger).setEmoji('🚪'),
-        new ButtonBuilder().setCustomId(`dev_guild_reset_settings_${guild.id}`).setLabel("Resetar Configs").setStyle(ButtonStyle.Danger).setEmoji('🔄'),
-        new ButtonBuilder().setCustomId(`dev_guild_send_dm_${guild.id}`).setLabel("DM Dono").setStyle(ButtonStyle.Primary).setEmoji('✉️')
-    );
-    
-    const featuresListText = activeFeatures.length > 0
-        ? activeFeatures.map(f => `> ✨ **${f}**`).join('\n')
-        : '> `Nenhuma feature premium ativa.`';
-
-    return [
-        {
-            "type": 17, "accent_color": 3447003,
-            "components": [
-                { "type": 10, "content": `## ⚙️ Gerenciando: ${guild.name}` },
-                { "type": 10, "content": `> **ID:** \`${guild.id}\`` },
-                { "type": 14, "divider": true, "spacing": 1 },
-                { "type": 10, "content": "### Features Ativas:" },
-                { "type": 10, "content": featuresListText },
-                { "type": 14, "divider": true, "spacing": 1 },
-                { "type": 10, "content": "### Ações Rápidas:" },
-                { "type": 1, "components": quickActions.toJSON().components },
-                { "type": 14, "divider": true, "spacing": 1 },
-                { "type": 10, "content": "### Controles de Status:" },
-                {
-                    "type": 1, "components": [
-                        { "type": 2, "style": toggleBotStatusButton.style, "label": toggleBotStatusButton.label, "emoji": { "name": toggleBotStatusButton.emoji }, "custom_id": `dev_guild_toggle_status_${guild.id}` },
-                        { "type": 2, "style": 2, "label": "Definir Mensagem", "emoji": { "name": "📝" }, "custom_id": `dev_guild_set_maintenance_message_${guild.id}` },
-                    ]
-                },
-                {
-                    "type": 1, "components": [
-                         { "type": 2, "style": toggleAiButton.style, "label": toggleAiButton.label, "emoji": { "name": toggleAiButton.emoji }, "custom_id": `dev_guild_toggle_ai_${guild.id}` }
-                    ]
-                },
-                { "type": 14, "divider": true, "spacing": 1 },
-                { "type": 1, "components": [
-                        // BOTÕES DE GERENCIAMENTO
-                        { "type": 2, "style": 1, "label": "Gerenciar Features", "emoji": { "name": "✨" }, "custom_id": `dev_guild_edit_features_${guild.id}` },
-                        { "type": 2, "style": 1, "label": "Inspecionar Atividade", "emoji": { "name": "🔍" }, "custom_id": `dev_guild_inspect_activity_${guild.id}` }
-                    ]
-                },
-                { "type": 14, "divider": true, "spacing": 1 },
-                { "type": 1, "components": [{ "type": 2, "style": 2, "label": "Voltar", "emoji": { "name": "↩️" }, "custom_id": "dev_manage_guilds" }] }
-            ]
+    const embed = {
+        type: "rich",
+        title: `🔧 Gerenciar Guilda: ${guild.name}`,
+        description: `Aqui estão os detalhes técnicos e operacionais desta guilda. Use os controles abaixo para administrar.`,
+        color: 0x2B2D31, // Dark theme
+        thumbnail: { url: iconUrl },
+        fields: [
+            {
+                name: "📊 Diagnóstico (Para Faxina)",
+                value: `Status: ${data.healthStatus}\nDias no Servidor: **${data.joinedDays} dias**\nMembros: **${guild.memberCount}**\nBots: **${guild.members.cache.filter(m => m.user.bot).size}**`,
+                inline: false
+            },
+            {
+                name: "📦 Módulos Ativos (Uso Real)",
+                value: `\`\`\`\n${modulesString}\n\`\`\``,
+                inline: false
+            },
+            {
+                name: "👑 Proprietário & ID",
+                value: `👤 ${data.ownerName}\n🆔 \`${guild.id}\``,
+                inline: true
+            },
+            {
+                name: "📅 Entrada",
+                value: `<t:${Math.floor(guild.joinedTimestamp / 1000)}:F> (<t:${Math.floor(guild.joinedTimestamp / 1000)}:R>)`,
+                inline: true
+            }
+        ],
+        footer: {
+            text: "Painel de Desenvolvedor • BasicFlow Core"
         }
-    ];
+    };
+
+    return {
+        type: 17, // Componente V2
+        body: {
+            embeds: [embed],
+            components: [
+                {
+                    type: 1, // Action Row de Ações Críticas
+                    components: [
+                        {
+                            type: 2,
+                            style: 4, // DANGER (Vermelho)
+                            label: "FORCE LEAVE (Sair)",
+                            custom_id: `dev_guild_force_leave_${guild.id}`, // ID Dinâmico
+                            emoji: { name: "🚪" }
+                        },
+                        {
+                            type: 2,
+                            style: 2, // SECONDARY (Cinza)
+                            label: "Enviar DM pro Dono",
+                            custom_id: `dev_guild_send_dm_${guild.id}`,
+                            emoji: { name: "📨" }
+                        },
+                        {
+                            type: 2,
+                            style: 2, // SECONDARY
+                            label: "Inspecionar Atividade",
+                            custom_id: `dev_guild_inspect_activity_${guild.id}`, // Futuro: ver logs recentes
+                            emoji: { name: "📜" },
+                            disabled: true // Habilitar quando tiver sistema de logs globais pronto
+                        }
+                    ]
+                },
+                {
+                    type: 1, // Action Row de Configurações
+                    components: [
+                        {
+                            type: 2,
+                            style: 1, // PRIMARY (Azul)
+                            label: "Resetar Configurações",
+                            custom_id: `dev_guild_reset_settings_${guild.id}`,
+                            emoji: { name: "⚙️" }
+                        },
+                        {
+                            type: 2,
+                            style: 1, // PRIMARY
+                            label: "Alternar Status Premium (Fake)",
+                            custom_id: `dev_guild_toggle_status_${guild.id}`, // Handler a criar se necessário
+                            emoji: { name: "💎" },
+                            disabled: true
+                        }
+                    ]
+                },
+                {
+                    type: 1, // Action Row de Navegação
+                    components: [
+                        {
+                            type: 2,
+                            style: 2, // SECONDARY
+                            label: "Voltar para Lista",
+                            custom_id: "dev_guilds_page",
+                            emoji: { name: "⬅️" }
+                        }
+                    ]
+                }
+            ],
+            flags: V2_FLAG | EPHEMERAL_FLAG
+        }
+    };
 };
