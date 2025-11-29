@@ -1,46 +1,41 @@
-// Substitua o conteúdo em: handlers/commands/devpanel.js
-const generateDevMainMenu = require('../../ui/devPanel/mainMenu.js');
+// handlers/buttons/dev_manage_guilds.js
+const createDevGuildsMenu = require('../../ui/devPanel/devGuildsMenu.js');
 const db = require('../../database.js');
-const V2_FLAG = 1 << 15;
-const EPHEMERAL_FLAG = 1 << 6;
 
 module.exports = {
-    customId: 'devpanel',
+    customId: 'dev_manage_guilds',
     async execute(interaction) {
-        if (interaction.user.id !== process.env.DEV_USER_ID) {
-            return interaction.reply({ content: '❌ Você não tem permissão para usar este comando.', ephemeral: true });
-        }
-        
-        if (interaction.isButton()) {
-            await interaction.deferUpdate();
-        } else {
-            await interaction.deferReply({ ephemeral: true });
-        }
-        
-        await db.query("INSERT INTO bot_status (status_key, ai_services_enabled) VALUES ('main', true) ON CONFLICT (status_key) DO NOTHING");
-        const botStatus = (await db.query("SELECT * FROM bot_status WHERE status_key = 'main'")).rows[0];
-        
-        const totalGuilds = interaction.client.guilds.cache.size;
-        const totalMembers = interaction.client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
+        // Padrão: Página 0, Ordenação por Nome
+        const page = 0;
+        const sortType = 'name';
 
-        // --- NOVA LÓGICA ADICIONADA AQUI ---
-        // Busca o total de tokens usados hoje (desde a meia-noite)
-        const dailyTokenResult = await db.query(
-            "SELECT SUM(total_tokens) as total FROM ai_usage_logs WHERE created_at >= NOW()::date"
-        );
-        const dailyTokenUsage = parseInt(dailyTokenResult.rows[0]?.total || '0', 10);
-        // --- FIM DA NOVA LÓGICA ---
+        let guilds = Array.from(interaction.client.guilds.cache.values());
+        
+        // Ordenação padrão por nome
+        guilds.sort((a, b) => a.name.localeCompare(b.name));
 
-        const payload = {
-            // Passa o total de tokens para a função que gera o menu
-            components: generateDevMainMenu(botStatus, { totalGuilds, totalMembers }, dailyTokenUsage),
-            flags: V2_FLAG | EPHEMERAL_FLAG,
-        };
+        const itemsPerPage = 5;
+        const totalPages = Math.ceil(guilds.length / itemsPerPage);
+        const currentGuilds = guilds.slice(0, itemsPerPage);
 
-        if (interaction.deferred || interaction.replied) {
-            await interaction.editReply(payload);
-        } else {
-            await interaction.reply(payload);
+        // --- LÓGICA DE BUSCA DE DADOS (Igual à paginação) ---
+        const guildIds = currentGuilds.map(g => g.id);
+        let guildSettingsMap = new Map();
+        
+        if (guildIds.length > 0) {
+            try {
+                const res = await db.query('SELECT * FROM guild_settings WHERE guild_id = ANY($1)', [guildIds]);
+                res.rows.forEach(row => {
+                    guildSettingsMap.set(row.guild_id, row);
+                });
+            } catch (error) {
+                console.error("[DevPanel] Erro ao buscar dados iniciais:", error);
+            }
         }
+        // -----------------------------------------------------
+
+        const payload = createDevGuildsMenu(interaction, currentGuilds, page, totalPages, sortType, guildSettingsMap);
+        
+        await interaction.update(payload);
     }
 };

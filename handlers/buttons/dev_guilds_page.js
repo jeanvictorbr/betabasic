@@ -1,30 +1,54 @@
-const devPanelUtils = require('../../utils/devPanelUtils.js');
-const generateDevGuildsMenu = require('../../ui/devPanel/devGuildsMenu.js');
-const V2_FLAG = 1 << 15;
-const EPHEMERAL_FLAG = 1 << 6;
+// handlers/buttons/dev_guilds_page.js
+const createDevGuildsMenu = require('../../ui/devPanel/devGuildsMenu.js');
+const db = require('../../database.js'); // Importante: Database Wrapper
 
 module.exports = {
-    // Captura: dev_guilds_page_NUMERO_TIPO
-    customId: 'dev_guilds_page_',
+    customId: 'dev_guilds_page_', // Rota dinâmica para paginação
     async execute(interaction) {
-        await interaction.deferUpdate();
-
-        // Parse do ID: dev_guilds_page_1_inactive
+        // Formato esperado do ID: dev_guilds_page_NUMEROPAGINA_TIPOORDENACAO
         const parts = interaction.customId.split('_');
-        // parts[0]=dev, [1]=guilds, [2]=page, [3]=numero, [4]=sortType (opcional)
-        
         const page = parseInt(parts[3]);
-        const sortType = parts[4] || 'default'; // Se não tiver, usa default
+        const sortType = parts[4] || 'name'; // 'name' ou 'members'
 
-        try {
-            const { allGuildData, totals } = await devPanelUtils.getAndPrepareGuildData(interaction.client, sortType);
-            
-            await interaction.editReply({
-                components: generateDevGuildsMenu(allGuildData, page, totals, sortType),
-                flags: V2_FLAG | EPHEMERAL_FLAG,
-            });
-        } catch (error) {
-            console.error('Erro na paginação:', error);
+        // 1. Obter e Ordenar Guildas
+        let guilds = Array.from(interaction.client.guilds.cache.values());
+
+        if (sortType === 'members') {
+            guilds.sort((a, b) => b.memberCount - a.memberCount);
+        } else {
+            guilds.sort((a, b) => a.name.localeCompare(b.name));
         }
+
+        // 2. Paginação
+        const itemsPerPage = 5; // Mantém 5 para caber na descrição detalhada
+        const totalPages = Math.ceil(guilds.length / itemsPerPage);
+        const startIndex = page * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        const currentGuilds = guilds.slice(startIndex, endIndex);
+
+        // 3. Buscar Configurações no Banco de Dados (NOVO)
+        // Extrai apenas os IDs da página atual para não pesar o banco
+        const guildIds = currentGuilds.map(g => g.id);
+        
+        let guildSettingsMap = new Map();
+        
+        if (guildIds.length > 0) {
+            try {
+                // Usa o operador ANY para buscar vários IDs de uma vez
+                const res = await db.query('SELECT * FROM guild_settings WHERE guild_id = ANY($1)', [guildIds]);
+                
+                // Popula o Map
+                res.rows.forEach(row => {
+                    guildSettingsMap.set(row.guild_id, row);
+                });
+            } catch (error) {
+                console.error("Erro ao buscar settings para o DevPanel:", error);
+            }
+        }
+
+        // 4. Gerar UI atualizada com Map de configurações
+        const payload = createDevGuildsMenu(interaction, currentGuilds, page, totalPages, sortType, guildSettingsMap);
+        
+        await interaction.update(payload);
     }
 };

@@ -1,103 +1,104 @@
-module.exports = function generateDevGuildsMenu(guildsData, page = 0, totals, sortType = 'default') {
-    const ITEMS_PER_PAGE = 4; // Mantido em 4 para segurança
-    const totalPages = Math.ceil(guildsData.length / ITEMS_PER_PAGE);
-    const start = page * ITEMS_PER_PAGE;
-    const end = start + ITEMS_PER_PAGE;
-    const currentGuilds = guildsData.slice(start, end);
+// ui/devPanel/devGuildsMenu.js
+const { EPHEMERAL_FLAG } = require('../../utils/constants.js');
 
-    // Cabeçalho com estatísticas
-    const headerComponent = {
-        type: 10,
-        content: `## 🎛️ Gerenciamento Avançado (${guildsData.length})\n` +
-                 `> 📊 **Status:** ${totals.active} Ativos | 💎 ${totals.premium} Premium\n` +
-                 `> 🔎 **Ordenação Atual:** \`${sortType === 'inactive' ? '💀 Inativos (Fantasmas)' : sortType === 'active' ? '🔥 Mais Ativos' : '👥 Membros (Padrão)'}\``
-    };
+// Função auxiliar para determinar ícones de módulos ativos
+function getActiveModulesIcons(settings) {
+    if (!settings) return '💤 *Sem dados*';
 
-    const guildComponents = [];
+    let icons = [];
+    
+    // Verifica módulos principais
+    if (settings.store_enabled) icons.push('🛒'); // Loja
+    if (settings.tickets_category || settings.tickets_painel_channel) icons.push('🎫'); // Tickets (Se tiver categoria ou painel)
+    if (settings.ponto_status) icons.push('⏰'); // Ponto
+    if (settings.guardian_ai_enabled) icons.push('🛡️'); // Guardian
+    if (settings.registros_status) icons.push('📋'); // Registros
+    if (settings.welcome_enabled) icons.push('👋'); // Boas-vindas
 
-    for (const guild of currentGuilds) {
-        const memberCount = guild.memberCount ? guild.memberCount.toLocaleString('pt-BR') : 'N/A';
+    if (icons.length === 0) return '⚠️ **SEM USO**'; // Destaque para facilitar remoção
+    return icons.join(' ');
+}
+
+module.exports = function createDevGuildsMenu(interaction, guildsPage, page, totalPages, sortType, guildSettingsMap) {
+    // guildSettingsMap: Objeto ou Map onde a chave é o ID da guilda e o valor é o objeto de settings do DB
+
+    const fields = guildsPage.map(guild => {
+        const settings = guildSettingsMap ? guildSettingsMap.get(guild.id) : null;
+        const modulesStr = getActiveModulesIcons(settings);
+        const ownerId = guild.ownerId || 'Desconhecido';
         
-        // Formatação de Data de Entrada
-        let joinedDate = 'N/A';
-        if (guild.joinedAt) {
-            try { joinedDate = new Date(guild.joinedAt).toLocaleDateString('pt-BR'); } catch (e) {}
+        return {
+            name: `${guild.name}`,
+            value: `🆔 \`${guild.id}\` | 👑 <@${ownerId}>\n📊 **Módulos:** ${modulesStr}\n👥 **Membros:** \`${guild.memberCount}\``,
+            inline: false
+        };
+    });
+
+    const embed = {
+        type: "rich",
+        title: "💻 Painel de Controle - Lista de Servidores",
+        description: `Visualizando página **${page + 1}/${totalPages}**\nTotal de Servidores: **${interaction.client.guilds.cache.size}**\n\n> 🛒=Loja | 🎫=Tickets | ⏰=Ponto | 🛡️=Guardian | 📋=Registros`,
+        color: 0x2b2d31,
+        fields: fields,
+        footer: {
+            text: `Modo de Ordenação: ${sortType === 'members' ? 'Membros' : 'Nome'}`
         }
-
-        // Formatação de Última Atividade
-        let lastActiveStr = "💤 **Nunca/Sem Logs**";
-        if (guild.lastActiveTimestamp > 0) {
-            const date = new Date(guild.lastActiveTimestamp);
-            // Se foi hoje, mostra hora, senão mostra data
-            const isToday = new Date().toDateString() === date.toDateString();
-            lastActiveStr = isToday 
-                ? `🕒 Hoje às ${date.toLocaleTimeString('pt-BR')}` 
-                : `📅 ${date.toLocaleDateString('pt-BR')}`;
-        }
-
-        // Formatação de Features
-        const featuresList = guild.features.length > 0 
-            ? guild.features.map(f => `\`${f}\``).join(', ') 
-            : "❌ Nenhuma Key Ativa";
-
-        // Status Icons
-        let statusIcons = "";
-        if (guild.isPremium) statusIcons += "💎 ";
-        if (guild.maintenance) statusIcons += "🔧 ";
-        if (guild.totalInteractions > 1000) statusIcons += "🔥 ";
-        if (guild.totalInteractions === 0) statusIcons += "👻 ";
-
-        guildComponents.push(
-            { type: 14, divider: true, spacing: 2 },
-            {
-                type: 10,
-                content: `### ${statusIcons}${guild.name}\n` +
-                         `🆔 \`${guild.id}\` • 👑 <@${guild.ownerId}>\n` +
-                         `👥 **Membros:** ${memberCount} • 📥 **Entrou:** ${joinedDate}\n` +
-                         `📡 **Última Ação:** ${lastActiveStr} (Total: ${guild.totalInteractions})\n` +
-                         `🔑 **Licença:** ${featuresList}`
-            },
-            {
-                type: 1,
-                components: [
-                    { type: 2, style: 1, label: "Gerenciar", custom_id: `dev_guild_manage_select_${guild.id}` },
-                    { type: 2, style: 4, label: "Force Leave", custom_id: `dev_guild_force_leave_${guild.id}` }
-                ]
-            }
-        );
-    }
-
-    const paginationButtons = {
-        type: 1,
-        components: [
-            { type: 2, style: 2, label: "◀", custom_id: `dev_guilds_page_${page - 1}_${sortType}`, disabled: page === 0 },
-            { type: 2, style: 2, label: `${page + 1}/${totalPages || 1}`, custom_id: "noop", disabled: true },
-            { type: 2, style: 2, label: "▶", custom_id: `dev_guilds_page_${page + 1}_${sortType}`, disabled: page + 1 >= totalPages }
-        ]
     };
 
-    // Menu de Ordenação (Botões coloridos para facilitar)
-    const sortButtons = {
-        type: 1,
-        components: [
-            { type: 2, style: sortType === 'default' ? 3 : 2, label: "Membros", emoji: { name: "👥" }, custom_id: "dev_guilds_sort_default" },
-            { type: 2, style: sortType === 'active' ? 3 : 2, label: "Mais Ativos", emoji: { name: "🔥" }, custom_id: "dev_guilds_sort_active" },
-            { type: 2, style: sortType === 'inactive' ? 4 : 2, label: "Inativos (Limpeza)", emoji: { name: "💀" }, custom_id: "dev_guilds_sort_inactive" },
-            { type: 2, style: 1, label: "↻", custom_id: "dev_manage_guilds" } // Refresh simples
-        ]
-    };
+    // Gera as opções do menu de seleção
+    const selectOptions = guildsPage.map(guild => ({
+        label: guild.name.substring(0, 25),
+        description: `ID: ${guild.id}`,
+        value: guild.id,
+        emoji: { name: "🔧" }
+    }));
 
-    return [
+    const components = [
         {
-            type: 17,
+            type: 1,
+            components: [{
+                type: 3,
+                custom_id: "dev_guild_manage_select",
+                options: selectOptions,
+                placeholder: "Selecione um servidor para gerenciar/remover",
+                min_values: 1,
+                max_values: 1
+            }]
+        },
+        {
+            type: 1,
             components: [
-                headerComponent,
-                ...guildComponents,
-                { type: 14, divider: true, spacing: 2 },
-                paginationButtons,
-                sortButtons,
-                { type: 1, components: [{ type: 2, style: 2, label: "Voltar ao Menu", custom_id: "dev_main_menu_back" }] }
+                {
+                    type: 2,
+                    style: 2,
+                    label: "Anterior",
+                    custom_id: `dev_guilds_page_${page - 1}_${sortType}`,
+                    disabled: page === 0
+                },
+                {
+                    type: 2,
+                    style: 1, // Primary color para destacar
+                    label: sortType === 'members' ? "Ordenar por Nome" : "Ordenar por Membros",
+                    custom_id: `dev_guilds_sort_${sortType === 'members' ? 'name' : 'members'}_${page}`,
+                    emoji: { name: "🔃" }
+                },
+                {
+                    type: 2,
+                    style: 2,
+                    label: "Próxima",
+                    custom_id: `dev_guilds_page_${page + 1}_${sortType}`,
+                    disabled: page === totalPages - 1
+                },
+                {
+                    type: 2,
+                    style: 4, // Vermelho para sair
+                    label: "Voltar ao Menu",
+                    custom_id: "dev_main_menu_back",
+                    emoji: { name: "🏠" }
+                }
             ]
         }
     ];
+
+    return { embeds: [embed], components: components, flags: EPHEMERAL_FLAG };
 };
