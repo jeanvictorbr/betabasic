@@ -1,11 +1,16 @@
 // handlers/buttons/dev_guilds_page.js
 const createDevGuildsMenu = require('../../ui/devPanel/devGuildsMenu.js');
 const db = require('../../database.js');
+const { Routes } = require('discord.js');
+
+const V2_FLAG = 1 << 15;
+const EPHEMERAL_FLAG = 1 << 6;
+const FINAL_FLAGS = V2_FLAG | EPHEMERAL_FLAG;
 
 module.exports = {
     customId: 'dev_guilds_page_',
     async execute(interaction) {
-        await interaction.deferUpdate();
+        if (!interaction.deferred) await interaction.deferUpdate();
 
         const parts = interaction.customId.split('_');
         const page = parseInt(parts[3]);
@@ -25,7 +30,6 @@ module.exports = {
         const endIndex = startIndex + itemsPerPage;
         const currentGuilds = guilds.slice(startIndex, endIndex);
 
-        // --- BUSCA DE DADOS PARA A PÁGINA ATUAL ---
         const guildIds = currentGuilds.map(g => g.id);
         let guildSettingsMap = new Map();
         
@@ -36,12 +40,25 @@ module.exports = {
                     guildSettingsMap.set(row.guild_id, row);
                 });
             } catch (error) {
-                console.error("[DevPanel] Erro na paginação:", error);
+                console.error("Erro na paginação:", error);
             }
         }
 
-        const payload = createDevGuildsMenu(interaction, currentGuilds, page, totalPages, sortType, guildSettingsMap);
+        const menuPayload = createDevGuildsMenu(currentGuilds, page, totalPages, sortType, guildSettingsMap);
         
-        await interaction.editReply(payload);
+        try {
+            await interaction.client.rest.patch(
+                Routes.webhookMessage(interaction.applicationId, interaction.token, '@original'),
+                {
+                    body: {
+                        embeds: menuPayload.embeds,
+                        components: menuPayload.components,
+                        flags: FINAL_FLAGS
+                    }
+                }
+            );
+        } catch (e) {
+            console.error(e);
+        }
     }
 };

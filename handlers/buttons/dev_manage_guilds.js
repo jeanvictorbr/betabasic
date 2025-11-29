@@ -1,66 +1,63 @@
 // handlers/buttons/dev_manage_guilds.js
-const devPanelUtils = require('../../utils/devPanelUtils.js');
-const getAndPrepareGuildData = devPanelUtils.getAndPrepareGuildData;
-const generateDevGuildsMenu = require('../../ui/devPanel/devGuildsMenu.js');
-const { Routes } = require('discord.js'); // Necessário para a rota manual
+const createDevGuildsMenu = require('../../ui/devPanel/devGuildsMenu.js');
+const db = require('../../database.js');
+const { Routes } = require('discord.js');
 
-// Flags manuais para garantir que o Discord.js não as remova
-const V2_FLAG = 1 << 15; // 32768
-const EPHEMERAL_FLAG = 1 << 6; // 64
-const FINAL_FLAGS = V2_FLAG | EPHEMERAL_FLAG; // 32832
+const V2_FLAG = 1 << 15;
+const EPHEMERAL_FLAG = 1 << 6;
+const FINAL_FLAGS = V2_FLAG | EPHEMERAL_FLAG;
 
 module.exports = {
     customId: 'dev_manage_guilds',
     async execute(interaction) {
-        // Validação de segurança da função utilitária
-        if (typeof getAndPrepareGuildData !== 'function') {
-            console.error('ERRO CRÍTICO: getAndPrepareGuildData não é uma função!');
-            return interaction.reply({ content: '❌ Erro interno: Utilitário não carregado.', ephemeral: true });
-        }
-
         // Defere a interação se ainda não foi
         if (!interaction.deferred && !interaction.replied) {
              await interaction.deferUpdate();
         }
-        
-        try {
-            // Busca os dados (pode demorar um pouco)
-            const { allGuildData, totals } = await getAndPrepareGuildData(interaction.client);
-            
-            const menuPayload = generateDevGuildsMenu(allGuildData, 0, totals, 'default');
 
-            // --- CORREÇÃO DO ERRO 50035 (FORÇANDO O ENVIO DA FLAG V2) ---
-            // Usamos o REST direto para evitar que o Discord.js sanitize a flag V2
+        const page = 0;
+        const sortType = 'name';
+
+        // 1. Pega e ordena as guildas
+        let guilds = Array.from(interaction.client.guilds.cache.values());
+        guilds.sort((a, b) => a.name.localeCompare(b.name));
+
+        const itemsPerPage = 5;
+        const totalPages = Math.ceil(guilds.length / itemsPerPage);
+        const currentGuilds = guilds.slice(0, itemsPerPage);
+
+        // 2. Busca configurações no DB para exibir os ícones (Lógica Assertiva)
+        const guildIds = currentGuilds.map(g => g.id);
+        let guildSettingsMap = new Map();
+        
+        if (guildIds.length > 0) {
+            try {
+                const res = await db.query('SELECT * FROM guild_settings WHERE guild_id = ANY($1)', [guildIds]);
+                res.rows.forEach(row => {
+                    guildSettingsMap.set(row.guild_id, row);
+                });
+            } catch (error) {
+                console.error("[DevPanel] Erro ao buscar dados:", error);
+            }
+        }
+
+        // 3. Gera o Menu (Passando os argumentos na ordem correta)
+        const menuPayload = createDevGuildsMenu(currentGuilds, page, totalPages, sortType, guildSettingsMap);
+
+        try {
+            // 4. Envia via REST para evitar o erro 50035 (Flag V2)
             await interaction.client.rest.patch(
                 Routes.webhookMessage(interaction.applicationId, interaction.token, '@original'),
                 {
                     body: {
-                        components: menuPayload, // O Array [{ type: 17, ... }]
-                        flags: FINAL_FLAGS // Força 32832
+                        embeds: menuPayload.embeds,
+                        components: menuPayload.components,
+                        flags: FINAL_FLAGS
                     }
                 }
             );
-
         } catch (error) {
-            console.error('Erro em dev_manage_guilds:', error);
-            
-            // Tenta enviar o erro usando a mesma técnica segura
-            try {
-                await interaction.client.rest.patch(
-                    Routes.webhookMessage(interaction.applicationId, interaction.token, '@original'),
-                    {
-                        body: {
-                            components: [{
-                                type: 17,
-                                components: [{ type: 10, content: `❌ **Erro:** ${error.message}` }]
-                            }],
-                            flags: FINAL_FLAGS
-                        }
-                    }
-                );
-            } catch (e) {
-                console.error("Falha ao enviar mensagem de erro:", e);
-            }
+            console.error('Erro ao atualizar painel dev:', error);
         }
     }
 };

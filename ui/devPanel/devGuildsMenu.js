@@ -1,32 +1,26 @@
 // ui/devPanel/devGuildsMenu.js
-const { EPHEMERAL_FLAG } = require('../../utils/constants.js');
 
-// Função que gera os ícones baseados no DB
+// Função para gerar ícones de status
 function getActiveModulesIcons(settings) {
-    if (!settings) return '💤 *Dados não encontrados*';
+    if (!settings) return '💤 *Sem config no DB*';
 
     let icons = [];
-    
-    // Verifica cada módulo e adiciona o emoji se estiver ativo
-    if (settings.store_enabled) icons.push('🛒 Loja');
-    if (settings.tickets_category || settings.tickets_painel_channel) icons.push('🎫 Tickets');
-    if (settings.ponto_status) icons.push('⏰ Ponto');
-    if (settings.guardian_ai_enabled) icons.push('🛡️ Guardian');
-    if (settings.registros_status) icons.push('📋 Reg');
-    if (settings.welcome_enabled) icons.push('👋 Bem-vindo');
+    if (settings.store_enabled) icons.push('🛒');
+    if (settings.tickets_category || settings.tickets_painel_channel) icons.push('🎫');
+    if (settings.ponto_status) icons.push('⏰');
+    if (settings.guardian_ai_enabled) icons.push('🛡️');
+    if (settings.registros_status) icons.push('📋');
+    if (settings.welcome_enabled) icons.push('👋');
 
-    // Se nenhum módulo estiver ativo, marca como SEM USO para facilitar a remoção
-    if (icons.length === 0) return '⚠️ **SEM USO (Inativo)**'; 
-    
-    return icons.join(' | ');
+    if (icons.length === 0) return '⚠️ **SEM USO**';
+    return icons.join(' ');
 }
 
-module.exports = function createDevGuildsMenu(interaction, guildsPage, page, totalPages, sortType, guildSettingsMap) {
+// Assinatura da função corrigida para bater com o Handler
+module.exports = function createDevGuildsMenu(guildsPage, page, totalPages, sortType, guildSettingsMap) {
+    
     const fields = guildsPage.map(guild => {
-        // Pega as configurações desse servidor específico do Map
         const settings = guildSettingsMap ? guildSettingsMap.get(guild.id) : null;
-        
-        // Gera a string de módulos
         const modulesStr = getActiveModulesIcons(settings);
         const ownerId = guild.ownerId || 'Desconhecido';
         
@@ -40,7 +34,7 @@ module.exports = function createDevGuildsMenu(interaction, guildsPage, page, tot
     const embed = {
         type: "rich",
         title: "💻 Painel de Controle - Lista de Servidores",
-        description: `Visualizando página **${page + 1}/${totalPages}**\nTotal de Servidores: **${interaction.client.guilds.cache.size}**\n\n**Legenda:** Servidores com "⚠️ SEM USO" não têm nenhum sistema configurado.`,
+        description: `Visualizando página **${page + 1}/${totalPages}**\n\n> 🛒=Loja | 🎫=Tickets | ⏰=Ponto | 🛡️=Guardian | 📋=Reg\n> ⚠️=Provável Inativo (Sem configs)`,
         color: 0x2b2d31,
         fields: fields,
         footer: {
@@ -62,7 +56,7 @@ module.exports = function createDevGuildsMenu(interaction, guildsPage, page, tot
                 type: 3,
                 custom_id: "dev_guild_manage_select",
                 options: selectOptions,
-                placeholder: "Selecione para gerenciar ou sair",
+                placeholder: "Selecione um servidor para gerenciar",
                 min_values: 1,
                 max_values: 1
             }]
@@ -80,7 +74,7 @@ module.exports = function createDevGuildsMenu(interaction, guildsPage, page, tot
                 },
                 {
                     type: 2, style: 2, label: "Próxima",
-                    custom_id: `dev_guilds_page_${page + 1}_${sortType}`, disabled: page === totalPages - 1
+                    custom_id: `dev_guilds_page_${page + 1}_${sortType}`, disabled: page + 1 >= totalPages - 1
                 },
                 {
                     type: 2, style: 4, label: "Voltar",
@@ -90,5 +84,6 @@ module.exports = function createDevGuildsMenu(interaction, guildsPage, page, tot
         }
     ];
 
-    return { embeds: [embed], components: components, flags: EPHEMERAL_FLAG };
+    // Retorna apenas o objeto de dados, sem flags (as flags são adicionadas no handler)
+    return { embeds: [embed], components: components };
 };
