@@ -2,7 +2,6 @@ const { EmbedBuilder } = require('discord.js');
 const database = require('../../database');
 const devGuildManageMenu = require('../../ui/devPanel/devGuildManageMenu');
 
-// Mapeamento de nomes técnicos do DB para nomes bonitos
 const MODULE_NAMES = {
     'tickets_system': '🎫 Tickets',
     'welcome_system': '👋 Boas-vindas',
@@ -19,45 +18,46 @@ const MODULE_NAMES = {
 };
 
 module.exports = {
-    customId: 'dev_guild_manage_select', // Este handler pega o evento do menu de seleção
+    customId: 'dev_guild_manage_select',
     run: async (client, interaction) => {
         try {
-            // O valor selecionado no menu é o ID da guilda
             const guildId = interaction.values[0];
+            
+            // Verificação de segurança: Opção "none" ou inválida
+            if (!guildId || guildId === 'none') {
+                return interaction.deferUpdate(); // Só ignora
+            }
+
             const guild = client.guilds.cache.get(guildId);
 
-            // Se a guilda não estiver no cache (bot foi removido ou erro de sync)
             if (!guild) {
                 return interaction.reply({
-                    content: `❌ **Erro:** Não consegui encontrar a guilda \`${guildId}\` no cache do bot. Ela pode ter sido deletada ou o bot foi removido.`,
+                    content: `❌ **Erro:** A guilda \`${guildId}\` não está mais no cache (Bot removido?).`,
                     ephemeral: true
                 });
             }
 
             await interaction.deferUpdate();
 
-            // 1. Buscando dados do Banco de Dados
+            // 1. Buscando dados
             const db = await database.getClient();
             let guildModules = {};
             let guildSettings = {};
             let ownerName = 'Desconhecido';
 
             try {
-                // Busca módulos ativos
                 const modulesRes = await db.query("SELECT * FROM guild_modules WHERE guild_id = $1", [guildId]);
                 if (modulesRes.rows.length > 0) guildModules = modulesRes.rows[0];
 
-                // Busca configurações gerais (para ver prefixo, idioma, etc - opcional)
                 const settingsRes = await db.query("SELECT * FROM guild_settings WHERE guild_id = $1", [guildId]);
                 if (settingsRes.rows.length > 0) guildSettings = settingsRes.rows[0];
 
             } catch (err) {
-                console.error("Erro ao buscar dados da guilda no DevPanel:", err);
+                console.error("Erro DB DevPanel:", err);
             } finally {
                 db.release();
             }
 
-            // 2. Tenta buscar o Dono (pode falhar se o dono saiu, etc)
             try {
                 const owner = await guild.fetchOwner();
                 ownerName = `${owner.user.username} (${owner.id})`;
@@ -65,16 +65,14 @@ module.exports = {
                 ownerName = `⚠️ Não encontrado (ID: ${guild.ownerId})`;
             }
 
-            // 3. Processar Módulos Ativos
+            // 2. Processamento
             const activeModulesList = [];
             for (const [key, value] of Object.entries(guildModules)) {
-                // Pula colunas que não são booleanas ou de controle
                 if (value === true && MODULE_NAMES[key]) {
                     activeModulesList.push(MODULE_NAMES[key]);
                 }
             }
 
-            // 4. Análise de "Saúde" da Guilda (Para ajudar na faxina)
             let healthStatus = "🟢 Saudável";
             const daysSinceJoin = Math.floor((Date.now() - guild.joinedTimestamp) / (1000 * 60 * 60 * 24));
             
@@ -86,7 +84,7 @@ module.exports = {
                 healthStatus = "🟠 **ABANDONADA** (< 3 membros)";
             }
 
-            // Chama a UI com todos os dados processados
+            // 3. Resposta com UI Corrigida
             const uiResponse = devGuildManageMenu(guild, {
                 ownerName,
                 activeModulesList,
@@ -95,12 +93,13 @@ module.exports = {
                 healthStatus
             });
 
-            await interaction.editReply(uiResponse);
+            // CORREÇÃO: Usando .body
+            await interaction.editReply(uiResponse.body);
 
         } catch (error) {
             console.error('[DevPanel Error]', error);
             if (!interaction.replied) {
-                await interaction.reply({ content: 'Ocorreu um erro ao carregar os dados da guilda.', ephemeral: true });
+                await interaction.followUp({ content: 'Ocorreu um erro ao carregar os dados.', ephemeral: true });
             }
         }
     }
