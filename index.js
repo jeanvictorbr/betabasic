@@ -1082,23 +1082,6 @@ client.on(Events.MessageCreate, async (message) => {
             await message.reply(aiResponse);
         }
     }
-
-    // Adicione isso no final do index.js
-process.on('unhandledRejection', (reason, promise) => {
-    console.log(' [ANTI-CRASH] Unhandled Rejection:', reason);
-    // Se o erro for de Rate Limit, logar especificamente
-    if (reason?.code === 429) {
-        console.log(' [PERIGO] O bot está atingindo o Rate Limit do Discord! Verifique loops rápidos.');
-    }
-});
-
-process.on('uncaughtException', (err) => {
-    console.log(' [ANTI-CRASH] Uncaught Exception:', err);
-});
-
-process.on('uncaughtExceptionMonitor', (err, origin) => {
-    console.log(' [ANTI-CRASH] Uncaught Exception Monitor:', err, origin);
-});
     // --- FIM DA NOVA LÓGICA DO ASSISTENTE DE TICKET ---
 });
 client.login(process.env.DISCORD_TOKEN);
