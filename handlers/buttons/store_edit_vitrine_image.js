@@ -1,26 +1,31 @@
-// Crie em: handlers/buttons/store_edit_vitrine_image.js
-const { ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const db = require('../../database.js');
 
 module.exports = {
     customId: 'store_edit_vitrine_image',
     async execute(interaction) {
-        const settings = (await db.query('SELECT store_vitrine_config FROM guild_settings WHERE guild_id = $1', [interaction.guild.id])).rows[0] || {};
-        const currentImage = settings.store_vitrine_config?.image_url || '';
+        const settings = (await db.query('SELECT * FROM guild_settings WHERE guild_id = $1', [interaction.guild.id])).rows[0];
 
         const modal = new ModalBuilder()
-            .setCustomId('modal_store_edit_vitrine_image')
-            .setTitle('Alterar Imagem da Vitrine');
+            .setCustomId('store_edit_vitrine_image_modal')
+            .setTitle('Editar Imagem da Vitrine');
 
         const imageInput = new TextInputBuilder()
-            .setCustomId('input_image_url')
-            .setLabel("URL da Imagem (link direto)")
+            .setCustomId('store_vitrine_image_input')
+            .setLabel("URL da Imagem (Thumbnail)")
             .setStyle(TextInputStyle.Short)
-            .setValue(currentImage)
-            .setPlaceholder('https://i.imgur.com/sua-imagem.png')
-            .setRequired(false);
+            .setPlaceholder("https://imgur.com/...")
+            .setRequired(false); // Pode ser opcional para remover a imagem
 
-        modal.addComponents(new ActionRowBuilder().addComponents(imageInput));
+        // --- CORREÇÃO: Preencher com valor atual ---
+        if (settings?.store_vitrine_image) {
+            imageInput.setValue(settings.store_vitrine_image);
+        }
+        // -------------------------------------------
+
+        const firstActionRow = new ActionRowBuilder().addComponents(imageInput);
+        modal.addComponents(firstActionRow);
+
         await interaction.showModal(modal);
     }
 };
