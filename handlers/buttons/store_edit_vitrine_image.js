@@ -4,7 +4,9 @@ const db = require('../../database.js');
 module.exports = {
     customId: 'store_edit_vitrine_image',
     async execute(interaction) {
-        const settings = (await db.query('SELECT * FROM guild_settings WHERE guild_id = $1', [interaction.guild.id])).rows[0];
+        const res = await db.query('SELECT store_vitrine_config FROM guild_settings WHERE guild_id = $1', [interaction.guild.id]);
+        const settings = res.rows[0] || {};
+        const config = settings.store_vitrine_config || {};
 
         const modal = new ModalBuilder()
             .setCustomId('store_edit_vitrine_image_modal')
@@ -14,14 +16,13 @@ module.exports = {
             .setCustomId('store_vitrine_image_input')
             .setLabel("URL da Imagem (Thumbnail)")
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder("https://imgur.com/...")
-            .setRequired(false); // Pode ser opcional para remover a imagem
+            .setPlaceholder("https://...")
+            .setRequired(false);
 
-        // --- CORREÇÃO: Preencher com valor atual ---
-        if (settings?.store_vitrine_image) {
-            imageInput.setValue(settings.store_vitrine_image);
+        // Preenche APENAS se houver valor salvo
+        if (config.image) {
+            imageInput.setValue(config.image);
         }
-        // -------------------------------------------
 
         const firstActionRow = new ActionRowBuilder().addComponents(imageInput);
         modal.addComponents(firstActionRow);

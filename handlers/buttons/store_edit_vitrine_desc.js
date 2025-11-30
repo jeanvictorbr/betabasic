@@ -4,7 +4,9 @@ const db = require('../../database.js');
 module.exports = {
     customId: 'store_edit_vitrine_desc',
     async execute(interaction) {
-        const settings = (await db.query('SELECT * FROM guild_settings WHERE guild_id = $1', [interaction.guild.id])).rows[0];
+        const res = await db.query('SELECT store_vitrine_config FROM guild_settings WHERE guild_id = $1', [interaction.guild.id]);
+        const settings = res.rows[0] || {};
+        const config = settings.store_vitrine_config || {};
 
         const modal = new ModalBuilder()
             .setCustomId('store_edit_vitrine_desc_modal')
@@ -13,17 +15,16 @@ module.exports = {
         const descInput = new TextInputBuilder()
             .setCustomId('store_vitrine_desc_input')
             .setLabel("Nova Descrição")
-            .setStyle(TextInputStyle.Paragraph) // Paragraph para descrições longas
+            .setStyle(TextInputStyle.Paragraph)
             .setPlaceholder("Digite a descrição da sua loja aqui...")
-            .setMaxLength(4000)
+            .setMaxLength(3000)
             .setRequired(true);
 
-        // --- CORREÇÃO: Preencher com valor atual ---
-        if (settings?.store_vitrine_desc) {
-            // Garante que não ultrapasse o limite do input se por acaso o DB tiver algo enorme (segurança)
-            descInput.setValue(settings.store_vitrine_desc.substring(0, 4000));
-        }
-        // -------------------------------------------
+        // Verifica chaves 'description' ou 'desc' para compatibilidade
+        const currentVal = config.description || config.desc || 'Explore nossos produtos abaixo e abra um ticket para comprar!';
+        
+        // Garante que seja string e corta se for muito grande
+        descInput.setValue(String(currentVal).substring(0, 3000));
 
         const firstActionRow = new ActionRowBuilder().addComponents(descInput);
         modal.addComponents(firstActionRow);
