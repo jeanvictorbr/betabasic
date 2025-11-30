@@ -1,26 +1,59 @@
 // handlers/buttons/dev_guild_manage_select.js
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const db = require('../../database.js');
+const generateDevGuildManageMenu = require('../../ui/devPanel/devGuildManageMenu.js');
+
+const V2_FLAG = 1 << 15;
+const EPHEMERAL_FLAG = 1 << 6;
+const STORE_GUILD_ID = '1424757317701996544'; // Seu Servidor da Loja
 
 module.exports = {
-    customId: 'dev_guild_manage_select',
+    customId: 'dev_guild_manage_select', // Este ID pode variar se for dinâmico (ex: dev_guild_manage_select_), ajuste conforme seu arquivo original
     async execute(interaction) {
-        // Em vez de atualizar a mensagem direto, abrimos um Modal para pesquisa
-        // Isso resolve o problema de listar apenas 20 de 90 servidores.
+        // Se for um menu de seleção, o ID vem em values[0], se for botão, pode vir no customId split
+        let guildId = interaction.values ? interaction.values[0] : null;
         
-        const modal = new ModalBuilder()
-            .setCustomId('modal_dev_search_guild')
-            .setTitle('Gerenciar Guilda - Buscar');
+        // Fallback para caso o ID venha no botão (ex: dev_guild_manage_GWID)
+        if (!guildId) {
+            const parts = interaction.customId.split('_');
+            guildId = parts[parts.length - 1];
+        }
 
-        const searchInput = new TextInputBuilder()
-            .setCustomId('search_query')
-            .setLabel("Nome ou ID do Servidor")
-            .setPlaceholder("Digite para filtrar (deixe vazio para listar)")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false);
+        if (!guildId) return interaction.reply({ content: '❌ ID da guilda não encontrado.', flags: EPHEMERAL_FLAG });
 
-        const firstActionRow = new ActionRowBuilder().addComponents(searchInput);
-        modal.addComponents(firstActionRow);
+        await interaction.deferUpdate();
 
-        await interaction.showModal(modal);
+        try {
+            // 1. Busca dados da Guilda e Configurações
+            const guild = interaction.client.guilds.cache.get(guildId);
+            const settings = (await db.query('SELECT * FROM guild_settings WHERE guild_id = $1', [guildId])).rows[0];
+
+            if (!guild) {
+                return interaction.editReply({ content: '❌ O bot não está mais nesta guilda ou ela é inválida.' });
+            }
+
+            // 2. LÓGICA NOVA: Verifica se o Dono está na Loja
+            let ownerInStore = false;
+            try {
+                const storeGuild = interaction.client.guilds.cache.get(STORE_GUILD_ID);
+                if (storeGuild) {
+                    // Tenta buscar o membro. Se falhar (não estiver lá), vai pro catch.
+                    // Usamos fetch para garantir que não seja erro de cache
+                    await storeGuild.members.fetch(guild.ownerId); 
+                    ownerInStore = true;
+                }
+            } catch (error) {
+                ownerInStore = false; // Membro não encontrado ou erro na API
+            }
+
+            // 3. Gera a UI passando a nova info (ownerInStore)
+            const payload = generateDevGuildManageMenu(interaction, guild, settings, ownerInStore);
+            
+            // Adiciona flag V2 se necessário (geralmente menus dev são efêmeros ou update)
+            await interaction.editReply({ ...payload });
+
+        } catch (error) {
+            console.error('Erro ao gerenciar guilda (Dev):', error);
+            await interaction.editReply({ content: '❌ Erro ao carregar dados da guilda.' });
+        }
     }
 };
