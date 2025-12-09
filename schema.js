@@ -743,5 +743,6 @@ voice_hubs: {
         is_hidden: { type: 'BOOLEAN', 'default': false },
         created_at: { type: 'TIMESTAMPTZ', 'default': 'NOW()' }
     },
+    };
 
 module.exports = schema;
