@@ -1,13 +1,13 @@
+const db = require('../../database.js'); // Importação obrigatória
 const { PermissionFlagsBits } = require('discord.js');
 const getVoicePanel = require('../../ui/voiceControlPanel.js');
 const V2_FLAG = 1 << 15;
 
 module.exports = {
     customId: 'voice_toggle_lock_',
-    async execute(interaction, client, db) {
+    async execute(interaction) { // <--- APENAS INTERACTION
         const channelId = interaction.customId.split('_').pop();
 
-        // Verificar dono
         const tempVoice = await db.query('SELECT * FROM temp_voices WHERE channel_id = $1', [channelId]);
         if (tempVoice.rows.length === 0) return interaction.reply({ content: "Esta sala não está mais registrada.", ephemeral: true });
 
@@ -20,15 +20,12 @@ module.exports = {
 
         const newLockState = !tempVoice.rows[0].is_locked;
 
-        // Atualizar permissões do Discord
         await channel.permissionOverwrites.edit(interaction.guild.id, {
             Connect: newLockState ? false : true
         });
 
-        // Atualizar DB
         await db.query('UPDATE temp_voices SET is_locked = $1 WHERE channel_id = $2', [newLockState, channelId]);
 
-        // Gerar nova UI atualizada
         const newUI = getVoicePanel({
             channelName: channel.name,
             channelId: channel.id,
@@ -38,10 +35,6 @@ module.exports = {
             userLimit: channel.userLimit
         });
 
-        // Atualizar a mensagem do painel
-        await interaction.update({
-            components: newUI.components,
-            flags: V2_FLAG
-        });
+        await interaction.update({ components: newUI.components, flags: V2_FLAG });
     }
 };

@@ -1,6 +1,6 @@
 module.exports = {
     customId: 'voice_kick_select_',
-    async execute(interaction, client, db) {
+    async execute(interaction) {
         const channelId = interaction.customId.split('_').pop();
         const targetUserId = interaction.values[0];
         const channel = interaction.guild.channels.cache.get(channelId);
@@ -10,7 +10,6 @@ module.exports = {
         const member = await interaction.guild.members.fetch(targetUserId).catch(() => null);
 
         if (member && member.voice.channelId === channelId) {
-            // Expulsa desconectando
             await member.voice.disconnect(`Expulso pelo dono da sala`);
             await interaction.update({ content: `👋 **${member.user.username}** foi removido da sala.`, components: [] });
         } else {

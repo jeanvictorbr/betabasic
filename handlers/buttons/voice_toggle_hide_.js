@@ -1,10 +1,11 @@
+const db = require('../../database.js'); // Importação obrigatória
 const { PermissionFlagsBits } = require('discord.js');
 const getVoicePanel = require('../../ui/voiceControlPanel.js');
 const V2_FLAG = 1 << 15;
 
 module.exports = {
     customId: 'voice_toggle_hide_',
-    async execute(interaction, client, db) {
+    async execute(interaction) {
         const channelId = interaction.customId.split('_').pop();
 
         const tempVoice = await db.query('SELECT * FROM temp_voices WHERE channel_id = $1', [channelId]);
@@ -19,14 +20,12 @@ module.exports = {
 
         const newHideState = !tempVoice.rows[0].is_hidden;
 
-        // Atualiza permissão do @everyone
         await channel.permissionOverwrites.edit(interaction.guild.id, {
-            ViewChannel: newHideState ? false : null // false oculta, null volta ao padrão da categoria
+            ViewChannel: newHideState ? false : null
         });
 
         await db.query('UPDATE temp_voices SET is_hidden = $1 WHERE channel_id = $2', [newHideState, channelId]);
 
-        // Atualiza o painel
         const newUI = getVoicePanel({
             channelName: channel.name,
             channelId: channel.id,
