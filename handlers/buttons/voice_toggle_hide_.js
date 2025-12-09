@@ -1,11 +1,12 @@
-const db = require('../../database.js');
 const { PermissionFlagsBits } = require('discord.js');
 const getVoicePanel = require('../../ui/voiceControlPanel.js');
 const V2_FLAG = 1 << 15;
 
 module.exports = {
     customId: 'voice_toggle_hide_',
-    run: async (interaction, channelId) => {
+    async execute(interaction, client, db) {
+        const channelId = interaction.customId.split('_').pop();
+
         const tempVoice = await db.query('SELECT * FROM temp_voices WHERE channel_id = $1', [channelId]);
         if (tempVoice.rows.length === 0) return interaction.reply({ content: "Sala não encontrada.", ephemeral: true });
 

@@ -1,9 +1,10 @@
 const { ActionRowBuilder, UserSelectMenuBuilder } = require('discord.js');
-const db = require('../../database.js');
 
 module.exports = {
     customId: 'voice_kick_menu_',
-    run: async (interaction, channelId) => {
+    async execute(interaction, client, db) {
+        const channelId = interaction.customId.split('_').pop();
+
         // Verificar dono
         const check = await db.query('SELECT owner_id FROM temp_voices WHERE channel_id = $1', [channelId]);
         if (check.rows.length === 0 || check.rows[0].owner_id !== interaction.user.id) {

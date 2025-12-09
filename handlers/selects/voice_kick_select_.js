@@ -1,6 +1,7 @@
 module.exports = {
     customId: 'voice_kick_select_',
-    run: async (interaction, channelId) => {
+    async execute(interaction, client, db) {
+        const channelId = interaction.customId.split('_').pop();
         const targetUserId = interaction.values[0];
         const channel = interaction.guild.channels.cache.get(channelId);
 

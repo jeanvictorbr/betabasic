@@ -1,11 +1,12 @@
-const db = require('../../database.js');
 const { PermissionFlagsBits } = require('discord.js');
 const getVoicePanel = require('../../ui/voiceControlPanel.js');
 const V2_FLAG = 1 << 15;
 
 module.exports = {
-    customId: 'voice_toggle_lock_', // O index.js deve tratar prefixos terminados em _
-    run: async (interaction, channelId) => {
+    customId: 'voice_toggle_lock_',
+    async execute(interaction, client, db) {
+        const channelId = interaction.customId.split('_').pop();
+
         // Verificar dono
         const tempVoice = await db.query('SELECT * FROM temp_voices WHERE channel_id = $1', [channelId]);
         if (tempVoice.rows.length === 0) return interaction.reply({ content: "Esta sala não está mais registrada.", ephemeral: true });
