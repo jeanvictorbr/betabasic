@@ -13,35 +13,49 @@ module.exports = async (oldState, newState, client) => {
             const member = newState.member;
 
             try {
-                const parentCategory = config.category_id ? await guild.channels.fetch(config.category_id).catch(() => newState.channel.parent) : newState.channel.parent;
+                // Tenta pegar a categoria configurada ou a do canal pai
+                let parentCategory = newState.channel.parent;
+                if (config.category_id) {
+                    try {
+                        parentCategory = await guild.channels.fetch(config.category_id);
+                    } catch (e) {
+                        // Se falhar, usa a categoria atual mesmo
+                    }
+                }
                 
+                // Cria o canal de voz com permissões explícitas para o BOT
                 const voiceChannel = await guild.channels.create({
                     name: `Sala de ${member.user.username}`,
                     type: ChannelType.GuildVoice,
                     parent: parentCategory,
                     permissionOverwrites: [
                         {
-                            id: member.id,
-                            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers],
+                            id: member.id, // Permissão do Dono
+                            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.ViewChannel],
                         },
                         {
-                            id: guild.id,
-                            allow: [PermissionFlagsBits.Connect],
+                            id: guild.id, // Permissão do @everyone
+                            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel],
                         },
+                        {
+                            id: client.user.id, // --- CRUCIAL: Permissão do BOT ---
+                            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels],
+                        }
                     ],
                 });
 
-                // Mover membro
-                await member.voice.setChannel(voiceChannel);
+                // Mover membro para a sala criada
+                if (member.voice.channel) {
+                    await member.voice.setChannel(voiceChannel);
+                }
 
-                // --- CORREÇÃO AQUI ---
-                // Removido 'created_at' e o 'Date.now()'. O banco usará o DEFAULT NOW().
+                // Inserir no Banco (Sem Data manual, deixa o Default)
                 await db.query(`
                     INSERT INTO temp_voices (channel_id, guild_id, owner_id)
                     VALUES ($1, $2, $3)
                 `, [voiceChannel.id, guild.id, member.id]);
-                // ---------------------
 
+                // Gerar Painel V2
                 const panelJSON = getVoicePanel({
                     channelName: voiceChannel.name,
                     channelId: voiceChannel.id,
@@ -51,34 +65,50 @@ module.exports = async (oldState, newState, client) => {
                     userLimit: 0
                 });
 
+                // Enviar Painel (Com verificação extra)
                 setTimeout(async () => {
-                    await voiceChannel.send({ 
-                        content: `👋 Olá <@${member.id}>, aqui está o controle da sua sala.`, 
-                        flags: (1 << 15), 
-                        components: panelJSON.components 
-                    });
-                }, 1500);
+                    try {
+                        // Busca o canal novamente para garantir que o cache está atualizado e ele existe
+                        const targetChannel = await guild.channels.fetch(voiceChannel.id).catch(() => null);
+                        
+                        if (targetChannel) {
+                            await targetChannel.send({ 
+                                content: `👋 Olá <@${member.id}>, configure sua sala abaixo:`, // Menção aqui
+                                flags: (1 << 15), // V2 Flag
+                                components: panelJSON.components 
+                            });
+                        }
+                    } catch (sendError) {
+                        console.error("Erro ao enviar painel na sala temporária:", sendError);
+                    }
+                }, 2000); // Aumentei levemente o delay para 2s para o Discord processar o chat de voz
 
             } catch (err) {
-                console.error("Erro ao criar sala temporária:", err);
+                console.error("Erro Crítico ao criar sala temporária:", err);
             }
         }
     }
 
     // 2. Lógica de SAIR do canal (Deletar se vazio)
     if (oldState.channelId && (!newState.channelId || newState.channelId !== oldState.channelId)) {
-        const tempChannelCheck = await db.query(`SELECT * FROM temp_voices WHERE channel_id = $1`, [oldState.channelId]);
-        
-        if (tempChannelCheck.rows.length > 0) {
-            const channel = oldState.channel;
-            if (channel && channel.members.size === 0) {
-                try {
-                    await channel.delete();
-                    await db.query(`DELETE FROM temp_voices WHERE channel_id = $1`, [oldState.channelId]);
-                } catch (err) {
-                    // Ignora erro se canal já foi deletado
+        // Verifica se o canal que saiu é uma sala temporária
+        try {
+            const tempChannelCheck = await db.query(`SELECT * FROM temp_voices WHERE channel_id = $1`, [oldState.channelId]);
+            
+            if (tempChannelCheck.rows.length > 0) {
+                const channel = oldState.channel;
+                // Se o canal existe e está vazio (0 pessoas)
+                if (channel && channel.members.size === 0) {
+                    try {
+                        await channel.delete();
+                        await db.query(`DELETE FROM temp_voices WHERE channel_id = $1`, [oldState.channelId]);
+                    } catch (err) {
+                        // Canal já deletado ou erro de permissão
+                    }
                 }
             }
+        } catch (dbError) {
+            console.error("Erro ao verificar saída de canal:", dbError);
         }
     }
 };
