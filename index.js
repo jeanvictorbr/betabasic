@@ -37,7 +37,8 @@ const url = require('url');
 const crypto = require('crypto');
 const axios = require('axios'); // Mais seguro que fetch nativo
 // -
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMembers] });
+
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMembers] });
 automationsMonitor.start(client); //
 client.pontoIntervals = new Map();
 client.afkCheckTimers = new Map();
