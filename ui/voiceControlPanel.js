@@ -1,6 +1,4 @@
 module.exports = (data) => {
-    // data espera: { channelName, ownerId, isLocked, isHidden, userLimit, channelId }
-    
     const statusText = `## 🎛️ Painel de Controle: ${data.channelName}\n👑 **Dono:** <@${data.ownerId}>`;
 
     const statusDetails = `
@@ -12,51 +10,54 @@ module.exports = (data) => {
     return {
         type: 17, // Container V2
         components: [
-            // 1. Título (Texto)
             {
-                type: 10, // Text Display direto (sem Section type 9 para evitar erro de acessório)
+                type: 10, // Título
                 content: statusText,
                 style: 1
             },
-            // 2. Detalhes (Texto)
             {
-                type: 10, 
+                type: 10, // Detalhes
                 content: statusDetails,
-                style: 2 // Estilo diferente para diferenciar do título
+                style: 2
             },
-            // 3. Separador (Opcional, mas bom para organizar)
             {
-                type: 14, // Separator
+                type: 14, // Separador
                 spacing: 1
             },
-            // 4. Botões (Action Row) - EMOJIS CORRIGIDOS
             {
-                type: 1, // Action Row
+                type: 1, // Action Row (Botões)
                 components: [
                     {
-                        type: 2, // Button
-                        style: data.isLocked ? 3 : 4, // 3=Verde, 4=Vermelho
+                        type: 2, // Trancar
+                        style: data.isLocked ? 3 : 4,
                         label: data.isLocked ? "Destrancar" : "Trancar",
                         custom_id: `voice_toggle_lock_${data.channelId}`,
-                        emoji: { name: data.isLocked ? "🔓" : "🔒" } // Emoji Unicode Real
+                        emoji: { name: data.isLocked ? "🔓" : "🔒" }
                     },
                     {
-                        type: 2,
-                        style: 2, // Secondary (Cinza)
+                        type: 2, // Ocultar
+                        style: 2,
                         label: data.isHidden ? "Mostrar" : "Ocultar",
                         custom_id: `voice_toggle_hide_${data.channelId}`,
                         emoji: { name: data.isHidden ? "👁️" : "🙈" }
                     },
                     {
-                        type: 2,
-                        style: 1, // Primary (Roxo)
+                        type: 2, // Renomear
+                        style: 1,
                         label: "Renomear",
                         custom_id: `voice_rename_modal_${data.channelId}`,
                         emoji: { name: "✏️" }
                     },
                     {
-                        type: 2,
+                        type: 2, // MUTAR (NOVO)
                         style: 2,
+                        label: "Mutar",
+                        custom_id: `voice_mute_menu_${data.channelId}`,
+                        emoji: { name: "🔇" }
+                    },
+                    {
+                        type: 2, // Kick
+                        style: 4,
                         label: "Kick",
                         custom_id: `voice_kick_menu_${data.channelId}`,
                         emoji: { name: "🚫" }

@@ -1,4 +1,4 @@
-const db = require('../../database.js'); // Importação obrigatória
+const db = require('../../database.js');
 const getVoicePanel = require('../../ui/voiceControlPanel.js');
 const V2_FLAG = 1 << 15;
 
@@ -11,12 +11,14 @@ module.exports = {
 
         if (!channel) return interaction.reply({ content: "Canal não encontrado.", ephemeral: true });
 
+        // Tenta renomear (pode falhar se renomear muito rápido - rate limit)
         try {
             await channel.setName(newName);
         } catch (err) {
-            return interaction.reply({ content: "⏳ Rate limit do Discord. Tente daqui a pouco.", ephemeral: true });
+            return interaction.reply({ content: "⏳ O Discord limita renomear canais (2x a cada 10min). Tente novamente em breve.", ephemeral: true });
         }
 
+        // Busca dados para redesenhar o painel
         const tempVoice = await db.query('SELECT * FROM temp_voices WHERE channel_id = $1', [channelId]);
         
         const newUI = getVoicePanel({
@@ -28,11 +30,10 @@ module.exports = {
             userLimit: channel.userLimit
         });
 
-        await interaction.reply({ 
-            content: `✅ Nome alterado para **${newName}**!`, 
+        // ATUALIZAÇÃO V2: Sem 'content', apenas atualizamos os componentes visuais
+        await interaction.update({ 
             components: newUI.components, 
-            flags: V2_FLAG,
-            ephemeral: true 
+            flags: V2_FLAG 
         });
     }
 };
