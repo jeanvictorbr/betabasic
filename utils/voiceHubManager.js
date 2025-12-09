@@ -38,7 +38,7 @@ module.exports = async (oldState, newState, client) => {
                             allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel],
                         },
                         {
-                            id: client.user.id, // --- CRUCIAL: Permissão do BOT ---
+                            id: client.user.id, // Permissão do BOT
                             allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels],
                         }
                     ],
@@ -65,23 +65,32 @@ module.exports = async (oldState, newState, client) => {
                     userLimit: 0
                 });
 
-                // Enviar Painel (Com verificação extra)
+                // Criar componente de Saudação (Substitui o content)
+                const greetingComponent = {
+                    type: 10, // Text Display
+                    content: `👋 Olá <@${member.id}>, configure sua sala abaixo:`,
+                    style: 1 // Estilo de destaque
+                };
+
+                // Adiciona a saudação no topo da lista de componentes
+                const finalComponents = [greetingComponent, ...panelJSON.components];
+
+                // Enviar Painel
                 setTimeout(async () => {
                     try {
-                        // Busca o canal novamente para garantir que o cache está atualizado e ele existe
                         const targetChannel = await guild.channels.fetch(voiceChannel.id).catch(() => null);
                         
                         if (targetChannel) {
                             await targetChannel.send({ 
-                                content: `👋 Olá <@${member.id}>, configure sua sala abaixo:`, // Menção aqui
-                                flags: (1 << 15), // V2 Flag
-                                components: panelJSON.components 
+                                // content: FOI REMOVIDO POIS É PROIBIDO NA V2
+                                flags: (1 << 15), 
+                                components: finalComponents 
                             });
                         }
                     } catch (sendError) {
                         console.error("Erro ao enviar painel na sala temporária:", sendError);
                     }
-                }, 2000); // Aumentei levemente o delay para 2s para o Discord processar o chat de voz
+                }, 2000); 
 
             } catch (err) {
                 console.error("Erro Crítico ao criar sala temporária:", err);
@@ -91,19 +100,17 @@ module.exports = async (oldState, newState, client) => {
 
     // 2. Lógica de SAIR do canal (Deletar se vazio)
     if (oldState.channelId && (!newState.channelId || newState.channelId !== oldState.channelId)) {
-        // Verifica se o canal que saiu é uma sala temporária
         try {
             const tempChannelCheck = await db.query(`SELECT * FROM temp_voices WHERE channel_id = $1`, [oldState.channelId]);
             
             if (tempChannelCheck.rows.length > 0) {
                 const channel = oldState.channel;
-                // Se o canal existe e está vazio (0 pessoas)
                 if (channel && channel.members.size === 0) {
                     try {
                         await channel.delete();
                         await db.query(`DELETE FROM temp_voices WHERE channel_id = $1`, [oldState.channelId]);
                     } catch (err) {
-                        // Canal já deletado ou erro de permissão
+                        // Ignora
                     }
                 }
             }
