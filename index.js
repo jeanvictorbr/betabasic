@@ -6,6 +6,7 @@ const { checkExpiringFeatures } = require('./utils/premiumExpiryMonitor.js');
 const { startPurgeMonitor } = require('./utils/purgeMonitor');
 const { checkTokenUsage } = require('./utils/tokenMonitor.js');
 const voiceHubManager = require('./utils/voiceHubManager.js');
+
 const path = require('node:path');
 const automationsMonitor = require('./utils/automationsMonitor.js');
 const { EPHEMERAL_FLAG } = require('./utils/constants');
@@ -1095,5 +1096,9 @@ client.on(Events.MessageCreate, async (message) => {
         }
     }
     // --- FIM DA NOVA LÓGICA DO ASSISTENTE DE TICKET ---
+});
+
+client.on('voiceStateUpdate', (oldState, newState) => {
+    voiceHubManager(oldState, newState, client);
 });
 client.login(process.env.DISCORD_TOKEN);
