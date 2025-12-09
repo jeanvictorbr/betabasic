@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const { checkExpiringFeatures } = require('./utils/premiumExpiryMonitor.js');
 const { startPurgeMonitor } = require('./utils/purgeMonitor');
 const { checkTokenUsage } = require('./utils/tokenMonitor.js');
+const voiceHubManager = require('./utils/voiceHubManager.js');
 const path = require('node:path');
 const automationsMonitor = require('./utils/automationsMonitor.js');
 const { EPHEMERAL_FLAG } = require('./utils/constants');
@@ -42,6 +43,9 @@ client.afkCheckTimers = new Map();
 client.afkToleranceTimers = new Map();
 client.hangmanTimeouts = new Map();
 client.moduleStatusCache = new Map();
+client.on('voiceStateUpdate', (oldState, newState) => {
+    voiceHubManager(oldState, newState, client);
+});
 
 
 // ===================================================================

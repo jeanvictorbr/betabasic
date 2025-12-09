@@ -725,6 +725,23 @@ cloudflow_transfer_logs: {
         _unique: { type: 'UNIQUE', columns: ['user_id', 'target_guild_id'] }
     },
     
-};
+
+
+voice_hubs: {
+        guild_id: { type: 'VARCHAR(255)', primaryKey: true },
+        trigger_channel_id: { type: 'VARCHAR(255)', notNull: true },
+        category_id: { type: 'VARCHAR(255)' },
+        default_limit: { type: 'INTEGER', 'default': 0 }
+    },
+
+    temp_voices: {
+        channel_id: { type: 'VARCHAR(255)', primaryKey: true },
+        guild_id: { type: 'VARCHAR(255)', notNull: true },
+        owner_id: { type: 'VARCHAR(255)', notNull: true },
+        text_channel_id: { type: 'VARCHAR(255)' }, 
+        is_locked: { type: 'BOOLEAN', 'default': false },
+        is_hidden: { type: 'BOOLEAN', 'default': false },
+        created_at: { type: 'TIMESTAMPTZ', 'default': 'NOW()' }
+    },
 
 module.exports = schema;
