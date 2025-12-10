@@ -19,6 +19,7 @@ const schema = {
     // Configuração dos Formulários (Automações)
     forms_templates: {
         form_id: { type: 'SERIAL', primaryKey: true },
+        approved_role_id: { type: 'VARCHAR(255)' },
         guild_id: { type: 'VARCHAR(255)', notNull: true },
         custom_id: { type: 'VARCHAR(100)', notNull: true }, // ID único (ex: 'recrutamento')
         title: { type: 'VARCHAR(255)', notNull: true },
