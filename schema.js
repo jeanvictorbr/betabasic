@@ -15,6 +15,20 @@ const schema = {
 		guild_id: { type: 'VARCHAR(255)', primaryKey: true },
 		enabled: { type: 'BOOLEAN', default: false }
 	},
+
+    // Configuração dos Formulários (Automações)
+    forms_templates: {
+        form_id: { type: 'SERIAL', primaryKey: true },
+        guild_id: { type: 'VARCHAR(255)', notNull: true },
+        custom_id: { type: 'VARCHAR(100)', notNull: true }, // ID único (ex: 'recrutamento')
+        title: { type: 'VARCHAR(255)', notNull: true },
+        description: { type: 'TEXT' },
+        button_label: { type: 'VARCHAR(50)', 'default': 'Iniciar Formulário' },
+        questions: { type: 'JSONB', notNull: true }, // Array das perguntas
+        log_channel_id: { type: 'VARCHAR(255)' },
+        created_at: { type: 'TIMESTAMPTZ', 'default': 'NOW()' },
+        _unique: { type: 'UNIQUE', columns: ['guild_id', 'custom_id'] }
+    },
     
  // --- NOVA TABELA PARA BLUEPRINTS DO ARQUITETO ---
     guild_blueprints: {
