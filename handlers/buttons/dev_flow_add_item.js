@@ -1,26 +1,26 @@
-const { ModalBuilder, TextInputBuilder, ActionRowBuilder, TextInputStyle } = require('discord.js');
+const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js');
 
 module.exports = {
     customId: 'dev_flow_add_item',
     async execute(interaction) {
-        const modal = new ModalBuilder()
-            .setCustomId('dev_flow_add_item_sub')
-            .setTitle('Adicionar Item na Loja');
+        // Lista de Features do Sistema (Você pode adicionar mais aqui)
+        const features = [
+            { label: 'Módulo Automações', value: 'AUTOMATIONS', description: 'Forms, Sorteios, Voz, Purge', emoji: '🤖' },
+            { label: 'Visuais Personalizados', value: 'CUSTOM_VISUALS', description: 'Cores, Imagens de Welcome/Leave', emoji: '🎨' },
+            { label: 'IA Assistente', value: 'AI_ASSISTANT', description: 'Respostas inteligentes em Tickets/Chat', emoji: '🧠' },
+            { label: 'Loja Premium', value: 'STORE_PREMIUM', description: 'Sem taxas, logs avançados', emoji: '🛒' },
+            { label: 'Moderação Avançada', value: 'ADVANCED_MOD', description: 'Guardian AI, Auditoria', emoji: '🛡️' }
+        ];
 
-        const name = new TextInputBuilder().setCustomId('name').setLabel("Nome do Item (ex: Premium 7d)").setStyle(TextInputStyle.Short).setRequired(true);
-        const feature = new TextInputBuilder().setCustomId('feature').setLabel("Feature Key (ex: AUTOMATIONS)").setStyle(TextInputStyle.Short).setRequired(true);
-        const price = new TextInputBuilder().setCustomId('price').setLabel("Preço (FC)").setStyle(TextInputStyle.Short).setRequired(true);
-        const days = new TextInputBuilder().setCustomId('days').setLabel("Duração (Dias)").setStyle(TextInputStyle.Short).setRequired(true);
-        const emoji = new TextInputBuilder().setCustomId('emoji').setLabel("Emoji").setStyle(TextInputStyle.Short).setRequired(false);
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('dev_flow_select_feature')
+            .setPlaceholder('Selecione a funcionalidade que será vendida')
+            .addOptions(features);
 
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(name),
-            new ActionRowBuilder().addComponents(feature),
-            new ActionRowBuilder().addComponents(price),
-            new ActionRowBuilder().addComponents(days),
-            new ActionRowBuilder().addComponents(emoji)
-        );
-
-        await interaction.showModal(modal);
+        await interaction.reply({
+            content: "🛠️ **Passo 1/2:** Qual funcionalidade este produto vai liberar?",
+            components: [new ActionRowBuilder().addComponents(select)],
+            ephemeral: true
+        });
     }
 };
