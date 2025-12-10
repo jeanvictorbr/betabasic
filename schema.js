@@ -10,6 +10,25 @@ const schema = {
         // --- NOVA COLUNA ADICIONADA AQUI ---
         active_ai_provider: { type: 'VARCHAR(50)', default: 'openai' } // RemPode ser 'openai' ou 'gemini'
     },
+
+    // --- ECONOMIA FLOWCOINS ---
+    flow_users: {
+        user_id: { type: 'VARCHAR(255)', primaryKey: true },
+        balance: { type: 'INTEGER', default: 0 },
+        last_daily: { type: 'TIMESTAMPTZ' }, // Para controlar o cooldown de 24h
+        total_farmed: { type: 'INTEGER', default: 0 } // Estatística
+    },
+
+    flow_shop_items: {
+        id: { type: 'SERIAL', primaryKey: true },
+        name: { type: 'VARCHAR(255)', notNull: true }, // Ex: "Premium Visuals (7 Dias)"
+        feature_key: { type: 'VARCHAR(100)', notNull: true }, // Ex: "CUSTOM_VISUALS"
+        price: { type: 'INTEGER', notNull: true },
+        duration_days: { type: 'INTEGER', default: 30 },
+        emoji: { type: 'VARCHAR(50)' },
+        description: { type: 'TEXT' },
+        is_active: { type: 'BOOLEAN', default: true }
+    },
     // --- INÍCIO: MÓDULO DE AUTOMAÇÕES ---
 	automations_settings: {
 		guild_id: { type: 'VARCHAR(255)', primaryKey: true },
