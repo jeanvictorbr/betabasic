@@ -14,7 +14,7 @@ module.exports = {
             .setCustomId('input_adjustment')
             .setLabel('Operação (+Tempo, -Tempo ou RESET)')
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Ex: +2h, -30m, +100 (minutos) ou RESET')
+            .setPlaceholder('Ex: +2, -3, +100 (minutos) ou RESET')
             .setRequired(true);
 
         const reason = new TextInputBuilder()
