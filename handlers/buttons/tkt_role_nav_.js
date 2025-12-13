@@ -9,7 +9,6 @@ module.exports = {
 
         if (!data) return interaction.update({ content: '❌ Sessão expirada.', components: [] });
 
-        // customId ex: tkt_role_nav_next_0
         const parts = interaction.customId.split('_');
         const action = parts[3]; // 'prev' ou 'next'
         const currentPage = parseInt(parts[4]);
@@ -21,13 +20,7 @@ module.exports = {
         data.currentPage = newPage;
         interaction.client.tempDeptData.set(tempId, data);
 
-        const payload = generateRoleSelector(
-            data.name,
-            data.availableRoles,
-            data.selectedIds,
-            newPage
-        );
-
+        const payload = generateRoleSelector(data.name, data.availableRoles, data.selectedIds, newPage);
         await interaction.update(payload);
     }
 };

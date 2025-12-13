@@ -4,18 +4,19 @@ const generateRoleSelector = require('../../ui/ticketRoleSelector.js');
 module.exports = {
     customId: 'modal_ticket_department_add',
     async execute(interaction) {
+        // 1. Captura os dados do formulário
         const name = interaction.fields.getTextInputValue('input_dept_name');
         const description = interaction.fields.getTextInputValue('input_dept_desc');
         const emoji = interaction.fields.getTextInputValue('input_dept_emoji') || '';
 
-        // 1. Pega todos os cargos do servidor, exceto @everyone e bots (opcional)
-        // Ordenamos por posição para ficar organizado
+        // 2. Carrega TODOS os cargos do servidor para a grade
+        // Removemos o @everyone (id igual ao guild.id) e cargos de bots (managed)
         const allRoles = interaction.guild.roles.cache
             .filter(r => r.id !== interaction.guild.id && !r.managed) 
-            .sort((a, b) => b.position - a.position)
+            .sort((a, b) => b.position - a.position) // Ordena por hierarquia
             .map(r => ({ name: r.name, id: r.id }));
 
-        // 2. Salva no cache temporário
+        // 3. Salva no cache temporário
         const tempId = interaction.user.id;
         interaction.client.tempDeptData = interaction.client.tempDeptData || new Map();
         
@@ -23,14 +24,15 @@ module.exports = {
             name, 
             description, 
             emoji,
-            availableRoles: allRoles, // Guardamos a lista para navegar
+            availableRoles: allRoles, // Lista completa
             selectedIds: [], // Começa vazio
-            currentPage: 0
+            currentPage: 0 // Página 0
         });
 
-        // 3. Gera a UI
+        // 4. Gera a NOVA UI de Botões (Substituindo o antigo Select Menu)
         const payload = generateRoleSelector(name, allRoles, [], 0);
 
+        // 5. Envia a resposta (Grade de botões)
         await interaction.reply(payload);
     }
 };

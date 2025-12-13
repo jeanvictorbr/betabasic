@@ -1,98 +1,88 @@
+// ui/ticketRoleSelector.js
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+
 module.exports = function ticketRoleSelector(deptName, allRoles, selectedRoleIds, page = 0) {
-    const ROLES_PER_PAGE = 12; // 4 linhas de 3 botões
+    const ROLES_PER_PAGE = 12; // 4 linhas x 3 botões
     const totalPages = Math.ceil(allRoles.length / ROLES_PER_PAGE);
     
-    // Garante que a página esteja dentro dos limites
+    // Proteção de limites de página
     page = Math.max(0, Math.min(page, totalPages - 1));
+    if (totalPages === 0) page = 0;
 
-    // Fatia os cargos para a página atual
+    // Pega os cargos da página atual
     const start = page * ROLES_PER_PAGE;
     const currentRoles = allRoles.slice(start, start + ROLES_PER_PAGE);
 
-    // 1. Constrói a Grade de Botões dos Cargos
-    // Precisamos dividir em linhas de 3 botões (ActionRows)
-    const roleRows = [];
-    let currentRowComponents = [];
+    const components = [];
+    let currentRow = new ActionRowBuilder();
 
-    for (let i = 0; i < currentRoles.length; i++) {
-        const role = currentRoles[i];
+    // Cria os botões dos cargos
+    currentRoles.forEach((role, index) => {
         const isSelected = selectedRoleIds.includes(role.id);
+        
+        const btn = new ButtonBuilder()
+            .setCustomId(`tkt_role_toggle_${role.id}`)
+            .setLabel(role.name.substring(0, 80)) // Limite do Discord
+            .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary); // Verde se selecionado, Cinza se não
 
-        currentRowComponents.push({
-            type: 2, // Button
-            style: isSelected ? 3 : 2, // 3 = Green (Success), 2 = Grey (Secondary)
-            label: role.name.substring(0, 80), // Corta nome longo
-            // ID: prefixo + AÇÃO + ID_CARGO
-            custom_id: `tkt_role_toggle_${role.id}` 
-        });
+        currentRow.addComponents(btn);
 
-        // Se encheu a linha com 3 ou é o último item, fecha a linha
-        if (currentRowComponents.length === 3 || i === currentRoles.length - 1) {
-            roleRows.push({
-                type: 1, // Action Row
-                components: currentRowComponents
-            });
-            currentRowComponents = [];
+        // Fecha a linha a cada 3 botões ou se acabou a lista
+        if ((index + 1) % 3 === 0 || index === currentRoles.length - 1) {
+            components.push(currentRow);
+            currentRow = new ActionRowBuilder();
         }
-    }
+    });
 
-    // 2. Constrói a Linha de Navegação e Confirmação (Sempre na base)
-    const navRow = {
-        type: 1,
-        components: [
-            {
-                type: 2,
-                style: 1, // Primary (Blurple)
-                label: '◀ Anterior',
-                custom_id: `tkt_role_nav_prev_${page}`,
-                disabled: page === 0
-            },
-            {
-                type: 2,
-                style: 1, // Primary
-                label: `Página ${page + 1}/${totalPages || 1}`,
-                custom_id: 'tkt_role_nav_ignore', // Botão apenas informativo
-                disabled: true
-            },
-            {
-                type: 2,
-                style: 1, // Primary
-                label: 'Próximo ▶',
-                custom_id: `tkt_role_nav_next_${page}`,
-                disabled: page >= totalPages - 1
-            },
-            {
-                type: 2,
-                style: 3, // Green
-                label: `✅ Salvar (${selectedRoleIds.length})`,
-                custom_id: 'tkt_role_save'
-            }
-        ]
-    };
+    // Cria a barra de navegação (Anterior | Info | Próximo | Salvar)
+    const navRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`tkt_role_nav_prev_${page}`)
+            .setLabel('◀ Anterior')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(page === 0),
+        
+        new ButtonBuilder()
+            .setCustomId('ignore_info')
+            .setLabel(`${page + 1}/${totalPages || 1}`)
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(true),
 
-    // Adiciona a navegação ao final das linhas de cargos
-    const allComponents = [...roleRows, navRow];
+        new ButtonBuilder()
+            .setCustomId(`tkt_role_nav_next_${page}`)
+            .setLabel('Próximo ▶')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(page >= totalPages - 1),
 
-    // Lista formatada para o Embed
+        new ButtonBuilder()
+            .setCustomId('tkt_role_save')
+            .setLabel(`💾 Salvar (${selectedRoleIds.length})`)
+            .setStyle(ButtonStyle.Success)
+    );
+
+    components.push(navRow);
+
+    // Formata a lista de texto para o Embed
     const selectedMentions = selectedRoleIds.length > 0 
-        ? selectedRoleIds.map(id => `<@&${id}>`).join(', ').substring(0, 1024) 
-        : 'Nenhum cargo selecionado.';
+        ? selectedRoleIds.map(id => `<@&${id}>`).join(', ')
+        : 'Nenhum selecionado';
 
     return {
+        content: '', // V2 Clean
         embeds: [
             {
                 title: `🛠️ Configurando: ${deptName}`,
-                description: 'Clique nos botões abaixo para **Ativar/Desativar** os cargos que terão acesso a este departamento.\nQuando terminar, clique em **Salvar**.',
+                description: 'Selecione os cargos que terão acesso a este departamento clicando nos botões abaixo.\nOs botões **Verdes** indicam cargos selecionados.',
                 color: 0x2b2d31,
                 fields: [
                     {
-                        name: `📋 Cargos Selecionados (${selectedRoleIds.length})`,
-                        value: selectedMentions
+                        name: 'Cargos Selecionados',
+                        value: selectedMentions.substring(0, 1024)
                     }
                 ]
             }
         ],
-        components: allComponents,
-        flags: 64 // Ephemeral
+        components: components, // A grade de botões
+        ephemeral: true
     };
 };

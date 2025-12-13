@@ -1,20 +1,20 @@
 // handlers/buttons/tkt_role_save.js
 const db = require('../../database.js');
-const generateSuccessUI = require('../../ui/ticketDepartmentSuccess.js'); // Usando o arquivo que criamos antes
+const generateSuccessUI = require('../../ui/ticketDepartmentSuccess.js');
 
 module.exports = {
     customId: 'tkt_role_save',
     async execute(interaction) {
         const data = interaction.client.tempDeptData?.get(interaction.user.id);
 
-        if (!data) return interaction.update({ content: '❌ Erro: Dados não encontrados.', components: [] });
+        if (!data) return interaction.update({ content: '❌ Sessão expirada.', components: [] });
 
         if (data.selectedIds.length === 0) {
-            return interaction.reply({ content: '⚠️ Selecione pelo menos um cargo antes de salvar.', ephemeral: true });
+            return interaction.reply({ content: '⚠️ Selecione pelo menos um cargo.', ephemeral: true });
         }
 
         try {
-            // Prepara o JSONB
+            // Converte array para JSON string para o banco (coluna JSONB)
             const rolesJson = JSON.stringify(data.selectedIds);
 
             await db.query(
@@ -24,14 +24,12 @@ module.exports = {
 
             interaction.client.tempDeptData.delete(interaction.user.id);
 
-            // Usa a UI de sucesso limpa (sem content)
             const payload = generateSuccessUI(data.name, data.selectedIds);
-            
             await interaction.update(payload);
 
         } catch (error) {
             console.error(error);
-            await interaction.reply({ content: '❌ Erro fatal ao salvar no banco.', ephemeral: true });
+            await interaction.reply({ content: '❌ Erro no banco de dados.', ephemeral: true });
         }
     }
 };
