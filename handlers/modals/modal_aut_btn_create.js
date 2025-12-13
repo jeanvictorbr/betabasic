@@ -11,12 +11,13 @@ module.exports = {
             let description = interaction.fields.getTextInputValue('input_panel_desc');
             const guildId = interaction.guild.id;
 
-            // [AJUSTE NA DESCRIÇÃO PADRÃO]
+            // [DESCRIÇÃO PADRÃO INTELIGENTE]
             if (!description) {
-                description = "Utilize o menu abaixo para pegar ou remover seus cargos.\n\n" +
-                              "🔹 **Clique no menu** para ver as opções.\n" +
-                              "🔹 Selecione um cargo para **Adicionar** ou **Remover** (se já tiver).\n" +
-                              "🔹 Seus outros cargos não serão afetados.";
+                description = "Gerencie seus cargos abaixo de forma automática.\n\n" +
+                              "🔄 **Sistema Inteligente:**\n" +
+                              "• Se você **não tem** o cargo: Você ganha ✅\n" +
+                              "• Se você **já tem** o cargo: Você remove 🗑️\n\n" +
+                              "*Selecione as opções no menu abaixo.*";
             }
 
             const res = await db.query(
@@ -30,7 +31,7 @@ module.exports = {
 
             const embed = new EmbedBuilder()
                 .setTitle('✅ Painel Criado!')
-                .setDescription(`**Título:** ${title}\n**ID:** ${panelId}\n\nAgora adicione os cargos que aparecerão no menu.`)
+                .setDescription(`**Título:** ${title}\n**ID:** ${panelId}\n\nAgora adicione os cargos ao menu de seleção.`)
                 .setColor('Green')
                 .setFooter({ text: 'Sistema de Auto-Cargos' });
 
