@@ -19,7 +19,7 @@ const schema = {
         total_farmed: { type: 'INTEGER', default: 0 } // Estatística
     },
 
-    // --- AUTOMAÇÃO: CARGOS INTERATIVOS (BUTTON ROLES) ---
+    // --- AUTOMAÇÃO: CARGOS INTERATIVOS (BUTTON ROLES)nova tabela schem ---
     button_role_panels: {
         panel_id: { type: 'SERIAL', primaryKey: true },
         guild_id: { type: 'VARCHAR(255)', notNull: true },
