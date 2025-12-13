@@ -126,6 +126,24 @@ async function createOrUpdateStandardCart(interaction, products) {
 module.exports = {
     customId: 'store_confirm_purchase_products_',
     async execute(interaction) {
+        // CORREÇÃO ROBUSTA:
+        // Se interaction.guild for null mas tivermos um guildId, forçamos o fetch.
+        if (!interaction.guild && interaction.guildId) {
+            try {
+                interaction.guild = await interaction.client.guilds.fetch(interaction.guildId);
+            } catch (error) {
+                console.error("Erro ao buscar a guilda:", error);
+            }
+        }
+
+        // Se mesmo assim não tiver guilda (ex: DM real), aborta.
+        if (!interaction.guild) {
+            return interaction.reply({ 
+                content: '❌ Esta ação requer estar dentro de um servidor. (Erro: Guild Not Found)', 
+                ephemeral: true 
+            });
+        }
+
         const parts = interaction.customId.split('_coupon_');
         const productIdsString = parts[0].replace('store_confirm_purchase_products_', '');
         const productIds = productIdsString.split('-');

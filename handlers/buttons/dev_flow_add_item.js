@@ -1,44 +1,39 @@
+// handlers/buttons/dev_flow_add_item.js
 const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js');
-const FEATURES = require('../../config/features.js'); // Importação dinâmica
+const FEATURES = require('../../config/features.js'); 
 
 module.exports = {
     customId: 'dev_flow_add_item',
     async execute(interaction) {
-        const options = [];
+        // Como FEATURES é uma lista (Array), usamos .map direto
+        const options = FEATURES.map(feature => ({
+            label: feature.label.substring(0, 100), // Pega o nome "Loja V2", etc.
+            description: `Libera: ${feature.value}`,
+            value: feature.value, // Pega o ID "STORE", etc.
+            emoji: '✨'
+        }));
 
-        // Itera sobre todas as chaves exportadas no features.js
-        // Suporta tanto formato de Objeto { KEY: { name: ... } } quanto Array
-        for (const key in FEATURES) {
-            const feat = FEATURES[key];
-            
-            // Tenta obter nome e descrição, ou usa a própria chave como fallback
-            const label = feat.name || feat.title || key;
-            const desc = feat.description || feat.desc || `Chave: ${key}`;
-            
-            options.push({
-                label: label.substring(0, 100), // Limite do Discord
-                value: key,
-                description: desc.substring(0, 100),
-                emoji: feat.emoji || '✨'
+        // Limita a 25 opções (limite do Discord) para não quebrar
+        const safeOptions = options.slice(0, 25);
+
+        if (safeOptions.length === 0) {
+            return interaction.reply({ 
+                content: '❌ Nenhuma feature encontrada em `config/features.js`.', 
+                flags: 1 << 6 
             });
-        }
-
-        // Proteção contra limite de 25 opções do Discord
-        const finalOptions = options.slice(0, 25);
-
-        if (finalOptions.length === 0) {
-            return interaction.reply({ content: "⚠️ Nenhuma feature encontrada em `config/features.js`.", ephemeral: true });
         }
 
         const select = new StringSelectMenuBuilder()
             .setCustomId('dev_flow_select_feature')
-            .setPlaceholder('Selecione a feature para vender')
-            .addOptions(finalOptions);
+            .setPlaceholder('Selecione a Feature que este item vai liberar')
+            .addOptions(safeOptions);
+
+        const row = new ActionRowBuilder().addComponents(select);
 
         await interaction.reply({
-            content: "🛠️ **Passo 1/2:** Selecione qual funcionalidade do sistema será vendida:",
-            components: [new ActionRowBuilder().addComponents(select)],
-            ephemeral: true
+            content: '💎 **Novo Item da Loja Flow**\n\nSelecione qual funcionalidade este produto deve liberar:',
+            components: [row],
+            flags: 1 << 6 
         });
     }
 };
