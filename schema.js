@@ -19,19 +19,19 @@ const schema = {
         total_farmed: { type: 'INTEGER', default: 0 } // Estatística
     },
 
-    // --- AUTOMAÇÃO: CARGOS INTERATIVOS (BUTTON ROLES)nova tabela schem ---
+// --- AUTOMAÇÃO: CARGOS INTERATIVOS (BUTTON ROLES) ---
     button_role_panels: {
         panel_id: { type: 'SERIAL', primaryKey: true },
         guild_id: { type: 'VARCHAR(255)', notNull: true },
-        channel_id: { type: 'VARCHAR(255)' }, // Onde o painel foi enviado
-        message_id: { type: 'VARCHAR(255)' }, // ID da mensagem enviada
+        channel_id: { type: 'VARCHAR(255)' },
+        message_id: { type: 'VARCHAR(255)' },
         title: { type: 'VARCHAR(255)', notNull: true },
         description: { type: 'TEXT' },
         image_url: { type: 'TEXT' },
-        roles_data: { type: 'JSONB', default: "'[]'" }, // Armazena: [{role_id, label, emoji}, ...]
+        // [CORREÇÃO] Removemos o "default" que estava quebrando
+        roles_data: { type: 'JSONB' }, 
         created_at: { type: 'TIMESTAMPTZ', default: 'NOW()' }
     },
-
     flow_shop_items: {
         id: { type: 'SERIAL', primaryKey: true },
         name: { type: 'VARCHAR(255)', notNull: true }, // Ex: "Premium Visuals (7 Dias)"
