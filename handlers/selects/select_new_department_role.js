@@ -1,3 +1,4 @@
+// handlers/selects/select_new_department_role.js
 const db = require('../../database.js');
 const { EmbedBuilder } = require('discord.js');
 
@@ -7,12 +8,11 @@ module.exports = {
         const tempData = interaction.client.tempDeptData?.get(interaction.user.id);
         
         if (!tempData) {
-            return interaction.update({ content: '❌ Tempo esgotado. Comece novamente.', components: [], embeds: [] });
+            return interaction.update({ content: '❌ Tempo esgotado ou erro nos dados. Comece novamente.', components: [], embeds: [] });
         }
 
-        // Pega a lista de IDs selecionados (Array)
+        // Pega todos os cargos selecionados
         const roleIds = interaction.values; 
-        // Converte para texto JSON para salvar no banco
         const rolesJson = JSON.stringify(roleIds);
 
         try {
@@ -21,28 +21,27 @@ module.exports = {
                 [interaction.guild.id, tempData.name, tempData.description, tempData.emoji, rolesJson]
             );
 
-            // Limpa o cache
             interaction.client.tempDeptData.delete(interaction.user.id);
 
-            // --- RESPOSTA SIMPLIFICADA PARA EVITAR ERRO DE API ---
-            const embed = new EmbedBuilder()
-                .setTitle('✅ Departamento Criado!')
-                .setDescription(`O departamento **${tempData.name}** foi configurado.`)
-                .addFields({ 
-                    name: 'Cargos Responsáveis', 
-                    value: roleIds.map(id => `<@&${id}>`).join(', ') || 'Nenhum'
-                })
+            // [CORREÇÃO DO ERRO API]
+            // Em vez de recarregar o menu complexo, mostramos um resumo do sucesso.
+            // O usuário pode usar /configurar novamente se quiser ver a lista atualizada.
+            const successEmbed = new EmbedBuilder()
+                .setTitle('✅ Departamento Salvo!')
+                .setDescription(`O departamento **${tempData.name}** foi criado com sucesso.`)
+                .addFields(
+                    { name: 'Cargos Vinculados', value: roleIds.map(r => `<@&${r}>`).join(', ') }
+                )
                 .setColor('Green');
-
-            // Atualiza a mensagem apenas com o sucesso, removendo o menu
+            
             await interaction.update({
                 content: '',
-                embeds: [embed],
-                components: [] 
+                embeds: [successEmbed],
+                components: [] // Remove o menu de seleção para finalizar
             });
 
         } catch (error) {
-            console.error('Erro ao salvar departamento:', error);
+            console.error(error);
             if (!interaction.replied) {
                 await interaction.reply({ content: '❌ Erro ao salvar no banco de dados.', ephemeral: true });
             }
