@@ -4,29 +4,24 @@ const { PermissionsBitField } = require('discord.js');
 module.exports = {
     customId: 'aut_role_system_interact',
     async execute(interaction) {
-        // Usa deferReply para ter tempo de processar sem travar
+        // 1. Resposta Rápida (Ephemeral)
         await interaction.deferReply({ ephemeral: true });
 
         const member = interaction.member;
-        const selectedRoleIds = interaction.values; // Apenas o que o usuário CLICOU
+        const selectedRoleIds = interaction.values; // O que foi clicado
 
         const added = [];
         const removed = [];
         const errors = [];
 
         try {
-            // Lógica de TOGGLE (Interruptor)
-            // Só olhamos para o que foi selecionado. O que não foi, o bot ignora.
-            
+            // --- LÓGICA DE TOGGLE (INTERRUPTOR) ---
             for (const roleId of selectedRoleIds) {
                 const role = interaction.guild.roles.cache.get(roleId);
-                
-                // Se o cargo não existe mais, pula
                 if (!role) continue;
 
-                // VERIFICAÇÃO INTELIGENTE
                 if (member.roles.cache.has(roleId)) {
-                    // Se JÁ TEM o cargo -> REMOVE
+                    // JÁ TEM -> REMOVE
                     try {
                         await member.roles.remove(role);
                         removed.push(role.name);
@@ -34,7 +29,7 @@ module.exports = {
                         errors.push(role.name);
                     }
                 } else {
-                    // Se NÃO TEM o cargo -> ADICIONA
+                    // NÃO TEM -> ADICIONA
                     try {
                         await member.roles.add(role);
                         added.push(role.name);
@@ -44,26 +39,25 @@ module.exports = {
                 }
             }
 
-            // Monta o texto de resposta
+            // --- FEEDBACK PARA O USUÁRIO ---
             let responseText = '';
-            
-            if (added.length > 0) responseText += `✅ **Você recebeu:** ${added.join(', ')}\n`;
-            if (removed.length > 0) responseText += `🗑️ **Você removeu:** ${removed.join(', ')}\n`;
-            
-            if (added.length === 0 && removed.length === 0) {
-                responseText = 'ℹ️ Nenhuma alteração foi feita.';
-            }
+            if (added.length > 0) responseText += `✅ **Adicionado:** ${added.join(', ')}\n`;
+            if (removed.length > 0) responseText += `🗑️ **Removido:** ${removed.join(', ')}\n`;
+            if (added.length === 0 && removed.length === 0) responseText = 'ℹ️ Nenhuma alteração de cargo feita.';
+            if (errors.length > 0) responseText += `⚠️ **Erro:** Não pude alterar: ${errors.join(', ')} (Verifique minhas permissões)`;
 
-            if (errors.length > 0) {
-                responseText += `\n⚠️ **Erro ao alterar:** ${errors.join(', ')} (Verifique as permissões do Bot)`;
-            }
-
-            // Envia a resposta atualizada
             await interaction.editReply({ content: responseText, ephemeral: true });
 
+            // --- O PULO DO GATO: RESETAR O MENU (DESTRAVAR) ---
+            // Editamos a mensagem original enviando os mesmos componentes.
+            // Isso força o Discord do usuário a "limpar" a seleção visual do menu.
+            await interaction.message.edit({ 
+                components: interaction.message.components 
+            }).catch(() => {}); // Catch silencioso caso dê rate limit ou erro de API
+
         } catch (error) {
-            console.error(error);
-            await interaction.editReply({ content: '❌ Ocorreu um erro ao processar sua solicitação.', ephemeral: true });
+            console.error("Erro no Auto-Role:", error);
+            await interaction.editReply({ content: '❌ Erro ao processar. Tente novamente.', ephemeral: true });
         }
     }
 };
