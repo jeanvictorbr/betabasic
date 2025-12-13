@@ -1,4 +1,3 @@
-// handlers/modals/modal_ticket_department_add.js
 const { ActionRowBuilder, RoleSelectMenuBuilder } = require('discord.js');
 
 module.exports = {
@@ -13,13 +12,12 @@ module.exports = {
         interaction.client.tempDeptData = interaction.client.tempDeptData || new Map();
         interaction.client.tempDeptData.set(tempId, { name, description, emoji });
 
-        // [CORREÇÃO VISUAL] 
-        // setMaxValues(25) faz o menu virar a "caixinha preta" de múltipla escolha.
+        // CRIAÇÃO DO MENU DE SELEÇÃO
         const select = new RoleSelectMenuBuilder()
             .setCustomId('select_new_department_role')
             .setPlaceholder('Selecione os cargos (Pode marcar vários)')
             .setMinValues(1)
-            .setMaxValues(25); // Máximo permitido pelo Discord
+            .setMaxValues(25); // <--- ISSO PERMITE SELECIONAR VÁRIOS
 
         const row = new ActionRowBuilder().addComponents(select);
 

@@ -493,7 +493,7 @@ ticket_departments: {
         guild_id: { type: 'VARCHAR(255)', notNull: true },
         name: { type: 'VARCHAR(100)', notNull: true },
         description: { type: 'TEXT' },
-        // ALTERADO: De VARCHAR para JSONB para suportar múltiplos IDs ["123", "456"]
+        // [MUDANÇA IMPORTANTE] De VARCHAR para JSONB para salvar múltiplos IDs ["123", "456"]
         role_id: { type: 'JSONB', notNull: true }, 
         emoji: { type: 'VARCHAR(100)' }
     },

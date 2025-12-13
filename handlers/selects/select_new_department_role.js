@@ -1,4 +1,3 @@
-// handlers/selects/select_new_department_role.js
 const db = require('../../database.js');
 const generateSuccessUI = require('../../ui/ticketDepartmentCreated.js');
 
@@ -8,18 +7,18 @@ module.exports = {
         const tempData = interaction.client.tempDeptData?.get(interaction.user.id);
         
         if (!tempData) {
-            // Resposta de erro simples caso perca o cache
+            // Se perder o cache, apenas avisa e remove componentes
             return interaction.update({ 
-                content: '❌ Tempo esgotado ou erro nos dados. Por favor, comece o processo novamente.', 
+                content: '❌ Tempo esgotado ou erro nos dados. Comece novamente.', 
                 components: [], 
                 embeds: [] 
             });
         }
 
-        // interaction.values já é um ARRAY com os IDs dos cargos selecionados ['123', '456']
+        // interaction.values retorna um ARRAY com todos os IDs selecionados
         const roleIds = interaction.values; 
         
-        // Convertemos para JSON string para salvar no banco (compatível com a coluna JSONB do schema)
+        // Convertemos para JSON string para salvar no banco (compatível com a coluna JSONB)
         const rolesJson = JSON.stringify(roleIds);
 
         try {
@@ -31,15 +30,16 @@ module.exports = {
             // Limpa o cache temporário
             interaction.client.tempDeptData.delete(interaction.user.id);
 
-            // Gera a UI de sucesso (Objeto Puro V2)
+            // Gera a resposta visual usando o arquivo UI V2 (sem content vazio)
             const payload = generateSuccessUI(tempData.name, roleIds);
             
-            // Atualiza a mensagem removendo o menu e mostrando o embed
+            // Atualiza a mensagem original removendo o menu e mostrando o sucesso
             await interaction.update(payload);
 
         } catch (error) {
             console.error('Erro ao salvar departamento:', error);
             if (!interaction.replied) {
+                // Em caso de erro, usa ephemeral
                 await interaction.reply({ content: '❌ Erro interno ao salvar no banco de dados.', ephemeral: true });
             }
         }
