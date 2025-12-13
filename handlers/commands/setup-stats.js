@@ -1,8 +1,8 @@
-// handlers/commands/setup-stats.js
 const { ChannelType, PermissionsBitField } = require('discord.js');
 const db = require('../../database.js');
 
 module.exports = {
+    // ESTA FUNÇÃO 'execute' É OBRIGATÓRIA AQUI
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
 
@@ -20,12 +20,12 @@ module.exports = {
             const statsCategory = await guild.channels.create({
                 name: '📊 ESTATÍSTICAS',
                 type: ChannelType.GuildCategory,
-                position: 0, // Tenta colocar no topo
+                position: 0,
                 permissionOverwrites: [
                     {
                         id: guild.id, // @everyone
-                        deny: [PermissionsBitField.Flags.Connect], // Ninguém conecta
-                        allow: [PermissionsBitField.Flags.ViewChannel] // Todos veem
+                        deny: [PermissionsBitField.Flags.Connect], 
+                        allow: [PermissionsBitField.Flags.ViewChannel] 
                     }
                 ]
             });
@@ -45,7 +45,6 @@ module.exports = {
             });
 
             // 3. Cria Canal de Clientes
-            // Conta membros que têm o cargo de cliente
             const clientRole = guild.roles.cache.get(settings.store_client_role_id);
             const clientCount = clientRole ? clientRole.members.size : 0;
 
@@ -72,7 +71,7 @@ module.exports = {
                 [statsCategory.id, membersChannel.id, clientsChannel.id, guild.id]
             );
 
-            await interaction.editReply(`✅ **Sistema Configurado!**\n\nCanais criados:\n- <#${membersChannel.id}>\n- <#${clientsChannel.id}>\n\nℹ️ **Nota:** Os números serão atualizados automaticamente a cada 10 minutos (limitação do Discord).`);
+            await interaction.editReply(`✅ **Sistema Configurado!**\n\nCanais criados:\n- <#${membersChannel.id}>\n- <#${clientsChannel.id}>\n\nℹ️ **Nota:** Os números serão atualizados automaticamente a cada 10 minutos.`);
 
         } catch (error) {
             console.error(error);
