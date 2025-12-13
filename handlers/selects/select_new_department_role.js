@@ -1,6 +1,6 @@
 // handlers/selects/select_new_department_role.js
 const db = require('../../database.js');
-const getTicketsMenu = require('../../ui/ticketsMenu.js'); 
+const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
     customId: 'select_new_department_role',
@@ -8,13 +8,16 @@ module.exports = {
         const tempData = interaction.client.tempDeptData?.get(interaction.user.id);
         
         if (!tempData) {
-            return interaction.update({ content: '❌ Tempo esgotado ou erro nos dados. Comece novamente.', components: [] });
+            return interaction.update({ content: '❌ Tempo esgotado. Comece novamente.', components: [], embeds: [] });
         }
 
-        const roleIds = interaction.values; // Agora é um array de IDs
+        // [CORREÇÃO] Pega TODOS os valores selecionados
+        const roleIds = interaction.values; 
+        // Converte para JSON para salvar no banco (ex: '["123","456"]')
         const rolesJson = JSON.stringify(roleIds);
 
         try {
+            // Salva no banco
             await db.query(
                 `INSERT INTO ticket_departments (guild_id, name, description, emoji, role_id) VALUES ($1, $2, $3, $4, $5)`,
                 [interaction.guild.id, tempData.name, tempData.description, tempData.emoji, rolesJson]
@@ -22,29 +25,28 @@ module.exports = {
 
             interaction.client.tempDeptData.delete(interaction.user.id);
 
-            // Atualiza o menu principal
-            const settings = (await db.query('SELECT * FROM guild_settings WHERE guild_id = $1', [interaction.guild.id])).rows[0];
-            const departments = (await db.query('SELECT * FROM ticket_departments WHERE guild_id = $1', [interaction.guild.id])).rows;
-            
-            const ui = getTicketsMenu(settings, departments);
+            // [CORREÇÃO DO ERRO DE API]
+            // Em vez de tentar renderizar o menu inteiro de novo (que buga o ephemeral),
+            // mostramos apenas um sucesso limpo. O usuário pode reabrir o menu depois.
+            const successEmbed = new EmbedBuilder()
+                .setTitle('✅ Departamento Criado!')
+                .setDescription(`**${tempData.name}** foi configurado com sucesso.`)
+                .addFields(
+                    { name: 'Cargos Vinculados', value: roleIds.map(r => `<@&${r}>`).join(', ') }
+                )
+                .setColor('Green');
 
-            // [CORREÇÃO CRÍTICA]
-            // Se 'ui' já traz tudo configurado, passamos ele direto.
-            // Se precisamos enviar uma mensagem de sucesso, é melhor usar followUp ou editar o content DENTRO do objeto ui se possível.
-            // Aqui vamos reconstruir o objeto de update para evitar conflito de flags.
-            
-            await interaction.update({
-                content: `✅ **Departamento Criado!**\nCargos vinculados: ${roleIds.map(r => `<@&${r}>`).join(', ')}`, // Mostra feedback no content
-                embeds: ui.embeds,
-                components: ui.components,
-                // Removemos flags manuais para deixar o discord gerenciar ou as que vêm do ui
+            await interaction.update({ 
+                content: '', 
+                embeds: [successEmbed], 
+                components: [] 
             });
 
         } catch (error) {
-            console.error(error);
-            // Em caso de erro, tenta enviar uma mensagem efêmera nova se o update falhar
+            console.error('[Ticket Dept] Erro:', error);
+            // Tenta avisar do erro de forma segura
             if (!interaction.replied) {
-                await interaction.reply({ content: '❌ Erro ao salvar no banco de dados.', ephemeral: true });
+                await interaction.reply({ content: '❌ Erro ao salvar no banco.', ephemeral: true });
             }
         }
     }

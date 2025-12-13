@@ -8,23 +8,22 @@ module.exports = {
         const description = interaction.fields.getTextInputValue('input_dept_desc');
         const emoji = interaction.fields.getTextInputValue('input_dept_emoji') || '';
 
-        // Salva no cache
+        // Salva dados temporários
         const tempId = interaction.user.id;
         interaction.client.tempDeptData = interaction.client.tempDeptData || new Map();
         interaction.client.tempDeptData.set(tempId, { name, description, emoji });
 
-        // [CORREÇÃO] Habilita múltipla seleção (1 até 10 cargos)
+        // [CORREÇÃO] Permite selecionar até 25 cargos
         const select = new RoleSelectMenuBuilder()
             .setCustomId('select_new_department_role')
             .setPlaceholder('Selecione os cargos responsáveis (Admin/Suporte)')
             .setMinValues(1)
-            .setMaxValues(10); 
+            .setMaxValues(25); // Agora aceita múltiplos!
 
         const row = new ActionRowBuilder().addComponents(select);
 
-        // Removemos flags V2 aqui se estiverem conflitando, usando reply padrão
         await interaction.reply({
-            content: `✨ Configurando departamento **${name}**.\nAgora, selecione quais cargos poderão **ver e responder** os tickets desta categoria (você pode escolher mais de um):`,
+            content: `✨ Configurando departamento **${name}**.\nAgora, selecione quais cargos poderão **ver e responder** os tickets desta categoria:`,
             components: [row],
             ephemeral: true
         });
