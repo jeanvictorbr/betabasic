@@ -1,35 +1,35 @@
-// Crie em: handlers/modals/modal_ticket_department_add.js
-const { RoleSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const V2_FLAG = 1 << 15;
-const EPHEMERAL_FLAG = 1 << 6;
+// handlers/modals/modal_ticket_department_add.js
+const { ActionRowBuilder, RoleSelectMenuBuilder } = require('discord.js');
+const db = require('../../database.js');
 
 module.exports = {
     customId: 'modal_ticket_department_add',
     async execute(interaction) {
-        const name = interaction.fields.getTextInputValue('input_name');
-        const description = interaction.fields.getTextInputValue('input_desc');
-        const emoji = interaction.fields.getTextInputValue('input_emoji');
+        // Recupera os dados temporários do modal (Nome, Descrição, Emoji)
+        const name = interaction.fields.getTextInputValue('input_dept_name');
+        const description = interaction.fields.getTextInputValue('input_dept_desc');
+        const emoji = interaction.fields.getTextInputValue('input_dept_emoji') || '';
 
-        // Codifica os dados para serem passados no customId. Usamos chaves curtas para economizar espaço.
-        const departmentData = JSON.stringify({ n: name, d: description, e: emoji });
-        const encodedData = encodeURIComponent(departmentData);
+        // Salva temporariamente no client ou passa via cache (aqui simplificado para passar via Select)
+        // Para simplificar, vamos salvar um registro temporário ou usar cache. 
+        // Como o select é a próxima etapa, vamos armazenar os dados no cache do cliente para recuperar no próximo passo.
         
-        // Garante que o customId não exceda o limite de 100 caracteres.
-        const baseCustomId = `select_ticket_department_role_`;
-        if ((baseCustomId + encodedData).length > 100) {
-            return interaction.reply({ content: 'O nome e a descrição do departamento são muito longos. Por favor, tente com textos mais curtos.', ephemeral: true });
-        }
+        const tempId = interaction.user.id;
+        interaction.client.tempDeptData = interaction.client.tempDeptData || new Map();
+        interaction.client.tempDeptData.set(tempId, { name, description, emoji });
 
-        const selectMenu = new RoleSelectMenuBuilder()
-            .setCustomId(baseCustomId + encodedData) // Passa os dados aqui
-            .setPlaceholder('Selecione o cargo para este departamento');
-        
-        const cancelButton = new ButtonBuilder().setCustomId('tickets_config_departments').setLabel('Cancelar').setStyle(ButtonStyle.Secondary);
+        const select = new RoleSelectMenuBuilder()
+            .setCustomId('select_new_department_role')
+            .setPlaceholder('Selecione os cargos responsáveis (Admin/Suporte)')
+            .setMinValues(1)
+            .setMaxValues(10); // [MODIFICADO] Permite até 10 cargos
 
-        // Atualiza a interação sem usar o campo 'content'
-        await interaction.update({
-            components: [new ActionRowBuilder().addComponents(selectMenu), new ActionRowBuilder().addComponents(cancelButton)],
-            flags: V2_FLAG | EPHEMERAL_FLAG
+        const row = new ActionRowBuilder().addComponents(select);
+
+        await interaction.reply({
+            content: `✨ Configurando departamento **${name}**.\nAgora, selecione quais cargos poderão **ver e responder** os tickets desta categoria:`,
+            components: [row],
+            ephemeral: true
         });
     }
 };
