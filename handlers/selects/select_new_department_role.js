@@ -1,6 +1,6 @@
 // handlers/selects/select_new_department_role.js
 const db = require('../../database.js');
-const { EmbedBuilder } = require('discord.js');
+const generateSuccessUI = require('../../ui/ticketDepartmentCreated.js');
 
 module.exports = {
     customId: 'select_new_department_role',
@@ -8,11 +8,18 @@ module.exports = {
         const tempData = interaction.client.tempDeptData?.get(interaction.user.id);
         
         if (!tempData) {
-            return interaction.update({ content: '❌ Tempo esgotado ou erro nos dados. Comece novamente.', components: [], embeds: [] });
+            // Resposta de erro simples caso perca o cache
+            return interaction.update({ 
+                content: '❌ Tempo esgotado ou erro nos dados. Por favor, comece o processo novamente.', 
+                components: [], 
+                embeds: [] 
+            });
         }
 
-        // Pega todos os cargos selecionados
+        // interaction.values já é um ARRAY com os IDs dos cargos selecionados ['123', '456']
         const roleIds = interaction.values; 
+        
+        // Convertemos para JSON string para salvar no banco (compatível com a coluna JSONB do schema)
         const rolesJson = JSON.stringify(roleIds);
 
         try {
@@ -21,29 +28,19 @@ module.exports = {
                 [interaction.guild.id, tempData.name, tempData.description, tempData.emoji, rolesJson]
             );
 
+            // Limpa o cache temporário
             interaction.client.tempDeptData.delete(interaction.user.id);
 
-            // [CORREÇÃO DO ERRO API]
-            // Em vez de recarregar o menu complexo, mostramos um resumo do sucesso.
-            // O usuário pode usar /configurar novamente se quiser ver a lista atualizada.
-            const successEmbed = new EmbedBuilder()
-                .setTitle('✅ Departamento Salvo!')
-                .setDescription(`O departamento **${tempData.name}** foi criado com sucesso.`)
-                .addFields(
-                    { name: 'Cargos Vinculados', value: roleIds.map(r => `<@&${r}>`).join(', ') }
-                )
-                .setColor('Green');
+            // Gera a UI de sucesso (Objeto Puro V2)
+            const payload = generateSuccessUI(tempData.name, roleIds);
             
-            await interaction.update({
-                content: '',
-                embeds: [successEmbed],
-                components: [] // Remove o menu de seleção para finalizar
-            });
+            // Atualiza a mensagem removendo o menu e mostrando o embed
+            await interaction.update(payload);
 
         } catch (error) {
-            console.error(error);
+            console.error('Erro ao salvar departamento:', error);
             if (!interaction.replied) {
-                await interaction.reply({ content: '❌ Erro ao salvar no banco de dados.', ephemeral: true });
+                await interaction.reply({ content: '❌ Erro interno ao salvar no banco de dados.', ephemeral: true });
             }
         }
     }
