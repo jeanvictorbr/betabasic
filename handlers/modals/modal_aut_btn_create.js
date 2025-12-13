@@ -8,10 +8,19 @@ module.exports = {
 
         try {
             const title = interaction.fields.getTextInputValue('input_panel_title');
-            const description = interaction.fields.getTextInputValue('input_panel_desc');
+            let description = interaction.fields.getTextInputValue('input_panel_desc');
             const guildId = interaction.guild.id;
 
-            // Salva no banco (agora sem o default que dava erro)
+            // [CONFIGURAÇÃO AUTOMÁTICA]
+            // Se o usuário não escreveu descrição, coloca uma explicativa padrão
+            if (!description) {
+                description = "Utilize o menu abaixo para gerenciar seus cargos.\n\n" +
+                              "✅ **Selecione** para receber o cargo.\n" +
+                              "❌ **Desmarque** para remover o cargo.\n\n" +
+                              "*Suas alterações são aplicadas imediatamente.*";
+            }
+
+            // Salva no banco
             const res = await db.query(
                 `INSERT INTO button_role_panels (guild_id, title, description, roles_data)
                  VALUES ($1, $2, $3, '[]')
@@ -21,20 +30,21 @@ module.exports = {
 
             const panelId = res.rows[0].panel_id;
 
-            // Retorna o painel de gerenciamento deste item
+            // Retorna o painel de gerenciamento
             const embed = new EmbedBuilder()
-                .setTitle('✅ Painel Criado!')
-                .setDescription(`O painel **"${title}"** foi registrado (ID: ${panelId}).\n\nAgora adicione os cargos que aparecerão no menu de seleção.`)
-                .setColor('Green');
+                .setTitle('✅ Painel Criado com Sucesso!')
+                .setDescription(`**Título:** ${title}\n**ID:** ${panelId}\n\nAgora adicione os cargos que aparecerão no menu.`)
+                .setColor('Green')
+                .setFooter({ text: 'Sistema de Auto-Cargos' });
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`aut_btn_add_item_${panelId}`) // Botão para adicionar cargo
+                    .setCustomId(`aut_pnl_add_role_${panelId}`) // Usa o novo sistema de Select Menu de cargos
                     .setLabel('Adicionar Cargo')
                     .setStyle(ButtonStyle.Primary)
                     .setEmoji('➕'),
                 new ButtonBuilder()
-                    .setCustomId(`aut_btn_send_panel_${panelId}`) // Botão para enviar no chat
+                    .setCustomId(`aut_btn_send_panel_${panelId}`)
                     .setLabel('Enviar no Canal')
                     .setStyle(ButtonStyle.Success)
                     .setEmoji('📤')

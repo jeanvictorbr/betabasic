@@ -4,49 +4,70 @@ const { PermissionsBitField } = require('discord.js');
 module.exports = {
     customId: 'aut_role_system_interact',
     async execute(interaction) {
+        // Resposta Efêmera Instantânea para não travar
         await interaction.deferReply({ ephemeral: true });
 
         const member = interaction.member;
-        const selectedRoleIds = interaction.values; // Lista de IDs que o usuário MARCOU
-
-        // Recupera TODOS os IDs possíveis deste menu (para saber quais remover)
-        // O interaction.component.options tem todas as opções disponíveis no menu
-        const allPossibleRoleIds = interaction.component.options.map(opt => opt.value);
+        const selectedRoleIds = interaction.values; // O que o usuário MARCOU (Check)
+        
+        // Pega todas as opções disponíveis no menu para saber o que ele DESMARCOU
+        const allOptions = interaction.component.options;
+        const allRoleIdsInMenu = allOptions.map(opt => opt.value);
 
         const added = [];
         const removed = [];
+        const errors = [];
 
         try {
-            // Lógica de Sincronização:
-            // 1. Se está selecionado -> Adiciona
-            // 2. Se NÃO está selecionado mas faz parte do menu -> Remove
-            
-            for (const roleId of allPossibleRoleIds) {
+            // Lógica de Sincronização
+            for (const roleId of allRoleIdsInMenu) {
+                const role = interaction.guild.roles.cache.get(roleId);
+                
+                // Pula se o cargo não existir mais no servidor
+                if (!role) continue;
+
                 if (selectedRoleIds.includes(roleId)) {
-                    // Usuário quer este cargo
+                    // --- USUÁRIO MARCOU (QUER O CARGO) ---
                     if (!member.roles.cache.has(roleId)) {
-                        await member.roles.add(roleId).catch(() => null);
-                        added.push(`<@&${roleId}>`);
+                        try {
+                            await member.roles.add(role);
+                            added.push(role.name);
+                        } catch (e) {
+                            errors.push(role.name);
+                        }
                     }
                 } else {
-                    // Usuário NÃO quer este cargo (desmarcou ou não marcou)
+                    // --- USUÁRIO DESMARCOU (QUER REMOVER) ---
                     if (member.roles.cache.has(roleId)) {
-                        await member.roles.remove(roleId).catch(() => null);
-                        removed.push(`<@&${roleId}>`);
+                        try {
+                            await member.roles.remove(role);
+                            removed.push(role.name);
+                        } catch (e) {
+                            errors.push(role.name);
+                        }
                     }
                 }
             }
 
-            let response = '✅ **Cargos Atualizados!**\n';
-            if (added.length > 0) response += `📥 **Adicionados:** ${added.join(', ')}\n`;
-            if (removed.length > 0) response += `📤 **Removidos:** ${removed.join(', ')}\n`;
-            if (added.length === 0 && removed.length === 0) response = 'ℹ️ Nenhuma alteração feita nos seus cargos.';
+            // Monta a resposta final
+            let responseText = '';
+            
+            if (added.length > 0) responseText += `✅ **Adicionados:** ${added.join(', ')}\n`;
+            if (removed.length > 0) responseText += `🗑️ **Removidos:** ${removed.join(', ')}\n`;
+            
+            if (added.length === 0 && removed.length === 0) {
+                responseText = 'ℹ️ Seus cargos já estão sincronizados com a seleção.';
+            }
 
-            await interaction.editReply({ content: response, ephemeral: true });
+            if (errors.length > 0) {
+                responseText += `\n⚠️ **Falha ao alterar:** ${errors.join(', ')} (Verifique minhas permissões)`;
+            }
+
+            await interaction.editReply({ content: responseText, ephemeral: true });
 
         } catch (error) {
             console.error(error);
-            await interaction.editReply({ content: '❌ Erro ao atualizar cargos. Verifique se o bot tem permissão (meu cargo deve ser maior que os que estou tentando dar).', ephemeral: true });
+            await interaction.editReply({ content: '❌ Ocorreu um erro ao processar seus cargos.', ephemeral: true });
         }
     }
 };
