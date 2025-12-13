@@ -23,7 +23,7 @@ const { logInteraction } = require('./utils/analyticsUtils.js');
 const MODULES = require('./config/modules.js');
 const { updateModuleStatusCache } = require('./utils/moduleStatusCache.js');
 const { splitMessage } = require('./utils/messageSplitter'); //
-
+const { startStatsMonitor } = require('./utils/statsMonitor.js');
 const { startVerificationLoop } = require('./utils/verificationLoop'); // <--- ADICIONE IS
 const hasFeature = require('./utils/featureCheck.js');
 const db = require('./database.js');
@@ -31,6 +31,8 @@ const http = require('http');
 const { MercadoPagoConfig, Payment } = require('mercadopago');
 const { approvePurchase } = require('./utils/approvePurchase.js');
 const { startGiveawayMonitor } = require('./utils/giveawayManager');
+// --- IMPORTAÇÃO DA CORREÇÃO DE PONTO ---
+const restorePontoSessions = require('./utils/pontoRestore.js'); 
 
 // --- IMPORTAÇÕES ADICIONADAS PARA O OAUTH2 FUNCIONAR ---
 const url = require('url');
@@ -353,12 +355,18 @@ console.log('--- Handlers Carregados ---');
 client.once(Events.ClientReady, async () => {
     startGiveawayMonitor(client);
     startVerificationLoop(client);
+    startStatsMonitor(client);
     await db.synchronizeDatabase();
     try {
         startPurgeMonitor(client, db); // Inicia o cronjob
     } catch(e) { console.error('[Monitor] Erro ao iniciar Purge:', e); }
 
     await updateModuleStatusCache(client);
+    
+    // --- CORREÇÃO PONTO: RESTAURAR INTERVALOS ---
+    await restorePontoSessions(client);
+    // ---------------------------------------------
+
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
         if (process.env.DEV_GUILD_ID) {
