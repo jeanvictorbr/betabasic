@@ -1,4 +1,3 @@
-// utils/MusicOrchestrator.js
 const { Client, GatewayIntentBits } = require('discord.js');
 const { Player } = require('discord-player');
 const db = require('../database.js');
@@ -6,13 +5,12 @@ const { decrypt } = require('./encryption.js');
 
 class MusicOrchestrator {
     constructor() {
-        this.workers = new Map(); // Armazena { id, client, player, name, busy, currentGuild }
+        this.workers = new Map();
     }
 
     async start() {
         console.log('[Orchestrator] 🎻 Iniciando Sistema Nativo (Discord-Player)...');
         
-        // 1. Buscar bots no banco
         const result = await db.query('SELECT * FROM music_workers WHERE is_active = true');
         const workersData = result.rows;
 
@@ -21,43 +19,36 @@ class MusicOrchestrator {
             return;
         }
 
-        // 2. Inicializar cada bot
         for (const data of workersData) {
             try {
                 const token = decrypt({ content: data.token_enc, iv: data.iv });
-                if (!token) continue;
+                if (!token) {
+                    console.error(`[Orchestrator] ❌ Token inválido para ${data.name}`);
+                    continue;
+                }
 
-                // Cliente do Worker
                 const workerClient = new Client({
-                    intents: [
-                        GatewayIntentBits.Guilds,
-                        GatewayIntentBits.GuildVoiceStates
-                    ]
+                    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates]
                 });
 
-                // --- A MÁGICA DO DISCORD PLAYER ---
                 const player = new Player(workerClient, {
                     skipFFmpeg: false,
-                    ytdlOptions: {
-                        quality: 'highestaudio',
-                        highWaterMark: 1 << 25
-                    }
+                    ytdlOptions: { quality: 'highestaudio', highWaterMark: 1 << 25 }
                 });
 
-                // --- CORREÇÃO AQUI ---
-                // Removemos o loadMulti que estava dando erro e usamos o padrão
-                await player.extractors.loadDefault();
-                // ---------------------
+                // --- CARREGAMENTO DE EXTRATORES ---
+                try {
+                    await player.extractors.loadDefault();
+                    // DEBUG: Mostra o que carregou
+                    console.log(`[Worker ${data.name}] 📦 Extratores ativos: ${player.extractors.store.keys().map(k => k).join(', ')}`);
+                } catch (extError) {
+                    console.error(`[Worker ${data.name}] ⚠️ Erro ao carregar extratores: ${extError.message}`);
+                }
+                // ----------------------------------
 
-                // Logs de erro do player
-                player.events.on('error', (queue, error) => {
-                    console.log(`[Worker ${data.name}] Erro na fila: ${error.message}`);
-                });
-                player.events.on('playerError', (queue, error) => {
-                    console.log(`[Worker ${data.name}] Erro na conexão: ${error.message}`);
-                });
+                player.events.on('error', (queue, error) => console.log(`[${data.name}] Erro Fila: ${error.message}`));
+                player.events.on('playerError', (queue, error) => console.log(`[${data.name}] Erro Player: ${error.message}`));
 
-                // Login do Worker
                 await workerClient.login(token);
 
                 this.workers.set(workerClient.user.id, {
@@ -69,29 +60,28 @@ class MusicOrchestrator {
                     currentGuild: null
                 });
 
-                console.log(`[Orchestrator] ✅ Worker ${data.name} pronto (Engine: FFmpeg)`);
+                console.log(`[Orchestrator] ✅ Worker ${data.name} ONLINE.`);
 
             } catch (error) {
-                console.error(`[Orchestrator] Falha no worker ${data.name}:`, error.message);
+                console.error(`[Orchestrator] ❌ CRÍTICO: Worker ${data.name} falhou:`, error.message);
             }
         }
     }
 
     getFreeWorker(guildId) {
-        // 1. Prioridade: Se já tem um worker nesta guild, usa ele (para filas)
         for (const worker of this.workers.values()) {
             if (worker.currentGuild === guildId) return worker;
+            // Verifica se está no canal de voz da guilda (reconect)
+            const guild = worker.client.guilds.cache.get(guildId);
+            if (guild && guild.members.me && guild.members.me.voice.channelId) {
+                return worker; 
+            }
         }
 
-        // 2. Busca um livre
         for (const worker of this.workers.values()) {
-            // Verifica se o worker não está marcado como ocupado
-            // E verifica se o player dele não tem fila ativa na memória
-            if (!worker.busy && (!worker.player.nodes.has(guildId))) {
-                // Verificação extra: se ele não tem NENHUM node ativo em lugar nenhum
-                if (worker.player.nodes.cache.size === 0) {
-                    return worker;
-                }
+            // Verifica se está livre E sem fila ativa
+            if (!worker.busy && worker.player.nodes.cache.size === 0) {
+                return worker;
             }
         }
         return null;
