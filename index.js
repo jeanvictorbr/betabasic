@@ -352,13 +352,7 @@ componentTypes.forEach(type => {
 
 console.log('--- Handlers Carregados ---');
 
-// --- INICIAR ORQUESTRA DE MÚSICA ---
-    try {
-        await MusicOrchestrator.start(); 
-    } catch (e) {
-        console.error('[Music] Falha ao iniciar orquestra:', e);
-    }
-    // --
+
 
 client.once(Events.ClientReady, async () => {
     startGiveawayMonitor(client);
@@ -374,7 +368,13 @@ client.once(Events.ClientReady, async () => {
     // --- CORREÇÃO PONTO: RESTAURAR INTERVALOS ---
     await restorePontoSessions(client);
     // ---------------------------------------------
-
+// --- INICIAR ORQUESTRA DE MÚSICA ---
+    try {
+        await MusicOrchestrator.start(); 
+    } catch (e) {
+        console.error('[Music] Falha ao iniciar orquestra:', e);
+    }
+    // -----------------------------------
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
         if (process.env.DEV_GUILD_ID) {
