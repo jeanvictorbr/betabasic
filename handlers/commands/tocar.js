@@ -1,17 +1,17 @@
 const { EmbedBuilder } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, NoSubscriberBehavior } = require('@discordjs/voice');
-const play = require('play-dl');
-const axios = require('axios'); // REQUER: npm install axios
+const axios = require('axios');
+const yts = require('yt-search'); // REQUER: npm install yt-search
 
 module.exports = {
     data: {
         name: 'tocar',
-        description: 'Toca música via Túnel Cobalt (Bypass IP Ban)',
+        description: 'Toca música via Túnel Wuk (Bypass Avançado)',
         options: [
             {
                 name: 'busca',
                 type: 3,
-                description: 'Nome da música ou Link (YouTube/SoundCloud)',
+                description: 'Nome da música ou Link',
                 required: true
             }
         ]
@@ -22,52 +22,65 @@ module.exports = {
         if (!channel) return interaction.editReply('❌ Entre em um canal de voz.');
 
         const query = interaction.options.getString('busca');
-        let targetUrl = query;
-        let trackTitle = 'Música Desconhecida';
-        let trackThumb = null;
+        let videoUrl = query;
+        let videoTitle = 'Música';
+        let videoThumb = null;
 
         try {
-            // --- PASSO 1: RESOLVER O LINK (Se for texto, tenta achar o link no YT) ---
-            // A pesquisa do YT costuma funcionar mesmo com IP sujo (o que falha é o download)
+            // --- PASSO 1: ACHAR O LINK (Usando yt-search) ---
+            // Se não for link, pesquisamos.
             if (!query.startsWith('http')) {
-                try {
-                    const results = await play.search(query, { limit: 1, source: { youtube: 'video' } });
-                    if (results.length > 0) {
-                        targetUrl = results[0].url;
-                        trackTitle = results[0].title;
-                        trackThumb = results[0].thumbnails[0]?.url;
-                    } else {
-                        return interaction.editReply('❌ Não encontrei essa música na pesquisa.');
-                    }
-                } catch (searchErr) {
-                    console.log('Pesquisa YT falhou, pedindo link direto...');
-                    return interaction.editReply('❌ A pesquisa por nome falhou (bloqueio do Google). Por favor, use o **LINK** direto do YouTube ou SoundCloud.');
+                const searchResult = await yts(query);
+                
+                if (!searchResult || !searchResult.videos || searchResult.videos.length === 0) {
+                    return interaction.editReply('❌ Não encontrei nada com esse nome.');
                 }
+
+                const video = searchResult.videos[0];
+                videoUrl = video.url;
+                videoTitle = video.title;
+                videoThumb = video.thumbnail;
             }
 
-            // --- PASSO 2: O TÚNEL (COBALT API) ---
-            // Mandamos o link para o Cobalt. Ele baixa e nos devolve o link do áudio.
-            // Isso evita o erro 403/Sign-in, pois é o Cobalt que acessa o YouTube.
+            // --- PASSO 2: O TÚNEL (Mirror wuk.sh) ---
+            // Usamos um servidor alternativo do Cobalt que costuma aceitar mais conexões
             
-            const cobaltResponse = await axios.post('https://api.cobalt.tools/api/json', {
-                url: targetUrl,
-                isAudioOnly: true, // Queremos só áudio
+            const headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            };
+
+            const body = {
+                url: videoUrl,
+                isAudioOnly: true,
                 aFormat: 'mp3'
-            }, {
-                headers: { 
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json' 
+            };
+
+            // Tenta primeiro no mirror wuk.sh (Geralmente mais estável para bots)
+            let streamUrl = null;
+            
+            try {
+                const response = await axios.post('https://co.wuk.sh/api/json', body, { headers });
+                if (response.data && response.data.url) {
+                    streamUrl = response.data.url;
                 }
-            });
-
-            const data = cobaltResponse.data;
-
-            if (!data || !data.url) {
-                console.error('Erro Cobalt:', data);
-                return interaction.editReply('❌ O Túnel não conseguiu processar esse link. Tente outro.');
+            } catch (err1) {
+                console.log('Mirror 1 falhou, tentando oficial...', err1.message);
+                // Se falhar, tenta o oficial
+                try {
+                    const response2 = await axios.post('https://api.cobalt.tools/api/json', body, { headers });
+                    if (response2.data && response2.data.url) {
+                        streamUrl = response2.data.url;
+                    }
+                } catch (err2) {
+                    throw new Error(`API Recusou: ${err2.response?.status || 'Erro Conexão'}`);
+                }
             }
 
-            const streamUrl = data.url; // Link direto do MP3
+            if (!streamUrl) {
+                return interaction.editReply('❌ Erro 400/403: O servidor de áudio recusou processar esse link específico.');
+            }
 
             // --- PASSO 3: TOCAR ---
             const resource = createAudioResource(streamUrl);
@@ -84,23 +97,22 @@ module.exports = {
             connection.subscribe(player);
 
             const embed = new EmbedBuilder()
-                .setTitle('🎶 Tocando via Túnel')
-                .setDescription(`**[${trackTitle !== 'Música Desconhecida' ? trackTitle : 'Link Original'}](${targetUrl})**`)
-                .setFooter({ text: 'Sistema Cobalt Bypass (Anti-Block)' })
-                .setColor('Green');
+                .setTitle('🎶 Tocando Agora')
+                .setDescription(`**[${videoTitle}](${videoUrl})**`)
+                .setFooter({ text: 'Sistema: Wuk.sh Tunnel' })
+                .setColor('Purple');
 
-            if (trackThumb) embed.setThumbnail(trackThumb);
+            if (videoThumb) embed.setThumbnail(videoThumb);
 
             await interaction.editReply({ embeds: [embed] });
 
             player.on('error', error => {
                 console.error('Erro Player:', error);
-                if(!interaction.replied) interaction.followUp({content: 'Erro na reprodução.', ephemeral:true});
             });
 
         } catch (error) {
-            console.error('Erro Fatal:', error.message);
-            await interaction.editReply('❌ Erro crítico. Se você digitou o nome, tente mandar o **LINK** direto.');
+            console.error('Erro Fatal:', error);
+            await interaction.editReply(`❌ Erro: ${error.message}. Tente usar um link direto do YouTube.`);
         }
     }
 };
