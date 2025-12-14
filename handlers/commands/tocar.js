@@ -5,12 +5,12 @@ const play = require('play-dl');
 module.exports = {
     data: {
         name: 'tocar',
-        description: 'Toca música do SoundCloud',
+        description: 'Toca música do YouTube ou SoundCloud',
         options: [
             {
                 name: 'busca',
                 type: 3, // STRING
-                description: 'Nome da música ou Link do SoundCloud',
+                description: 'Nome da música ou Link (YouTube/SoundCloud)',
                 required: true
             }
         ]
@@ -23,60 +23,65 @@ module.exports = {
             return interaction.editReply('❌ Você precisa estar em um canal de voz.');
         }
 
-        // --- CORREÇÃO CRÍTICA DO ERRO 403 ---
-        const manualId = process.env.SOUNDCLOUD_CLIENT_ID;
-
-        try {
-            if (manualId) {
-                // Se tem ID no .env, define DIRETO e não tenta buscar nada na rede
-                await play.setToken({
-                    soundcloud: {
-                        client_id: manualId
-                    }
-                });
-            } else {
-                // Só tenta o método automático (que dá erro 403) se NÃO tiver ID no .env
-                console.log('⚠️ [SoundCloud] Tentando gerar ClientID automático (Risco de 403)...');
-                const freeId = await play.getFreeClientID();
-                await play.setToken({
-                    soundcloud: {
-                        client_id: freeId
-                    }
-                });
-            }
-        } catch (error) {
-            console.error('Erro na configuração do SoundCloud:', error);
-            // Não retorna, tenta continuar mesmo assim, caso a lib tenha cache
-        }
-
         const query = interaction.options.getString('busca');
+        let stream;
         let trackInfo;
 
         try {
-            // --- 1. LÓGICA DE BUSCA ---
+            // --- LÓGICA HÍBRIDA (YouTube + SoundCloud) ---
+            
+            // 1. Verifica se é um LINK
             if (query.startsWith('http')) {
                 const type = await play.validate(query); 
-                if (type === 'so_track') {
+
+                if (type === 'yt_video') {
+                    // LINK DO YOUTUBE
+                    const ytInfo = await play.video_info(query);
+                    trackInfo = {
+                        title: ytInfo.video_details.title,
+                        url: ytInfo.video_details.url,
+                        duration: ytInfo.video_details.durationRaw,
+                        thumbnail: ytInfo.video_details.thumbnails[0].url
+                    };
+                    stream = await play.stream(query);
+
+                } else if (type === 'so_track') {
+                    // LINK DO SOUNDCLOUD (Ainda tenta, se tiver chave no .env)
+                    // Se não tiver chave, isso aqui pode falhar, mas o foco agora é YT
                     trackInfo = await play.soundcloud(query);
+                    trackInfo = {
+                        title: trackInfo.name,
+                        url: trackInfo.url,
+                        duration: 'SoundCloud',
+                        thumbnail: trackInfo.thumbnail
+                    };
+                    stream = await play.stream(trackInfo.url);
                 } else {
-                    return interaction.editReply('❌ Apenas links de **músicas** do SoundCloud são suportados.');
+                    return interaction.editReply('❌ Link não suportado. Use links do YouTube ou SoundCloud.');
                 }
             } else {
-                // Busca por texto
+                // 2. BUSCA POR TEXTO (Agora usa YouTube por padrão -> Mais estável)
                 const results = await play.search(query, {
-                    source: { soundcloud: 'tracks' },
-                    limit: 1
+                    limit: 1,
+                    source: { youtube: 'video' } // Mudamos para YouTube
                 });
 
                 if (results.length === 0) {
-                    return interaction.editReply('❌ Nenhuma música encontrada no SoundCloud.');
+                    return interaction.editReply('❌ Nenhuma música encontrada.');
                 }
-                trackInfo = results[0];
+
+                const ytVideo = results[0];
+                trackInfo = {
+                    title: ytVideo.title,
+                    url: ytVideo.url,
+                    duration: ytVideo.durationRaw,
+                    thumbnail: ytVideo.thumbnails[0].url
+                };
+
+                stream = await play.stream(ytVideo.url);
             }
 
-            // --- 2. STREAM DO ÁUDIO ---
-            const stream = await play.stream(trackInfo.url);
-            
+            // --- PLAYER ---
             const resource = createAudioResource(stream.stream, {
                 inputType: stream.type
             });
@@ -94,32 +99,25 @@ module.exports = {
             player.play(resource);
             connection.subscribe(player);
 
-            // --- 3. RESPOSTA ---
             const embed = new EmbedBuilder()
                 .setTitle('🎶 Tocando Agora')
-                .setDescription(`**[${trackInfo.name}](${trackInfo.url})**`)
+                .setDescription(`**[${trackInfo.title}](${trackInfo.url})**`)
                 .addFields(
-                    { name: 'Duração', value: trackInfo.durationInSec ? `${Math.floor(trackInfo.durationInSec / 60)}:${(trackInfo.durationInSec % 60).toString().padStart(2, '0')}` : 'Live', inline: true },
-                    { name: 'Artista', value: trackInfo.user?.name || 'Desconhecido', inline: true }
+                    { name: 'Duração', value: trackInfo.duration || 'Live', inline: true }
                 )
                 .setThumbnail(trackInfo.thumbnail)
-                .setColor('#ff5500');
+                .setColor('#FF0000'); // Vermelho YouTube
 
             await interaction.editReply({ embeds: [embed] });
 
             player.on('error', error => {
                 console.error('Erro no player:', error);
-                if (!interaction.replied) interaction.followUp({ content: '❌ Erro na reprodução.', ephemeral: true });
+                if (!interaction.replied) interaction.followUp({ content: '❌ Erro ao reproduzir áudio.', ephemeral: true });
             });
 
         } catch (error) {
-            console.error('Erro de execução:', error);
-            // Verifica se o erro ainda é 403 mesmo com a chave
-            if (error.message && error.message.includes('403')) {
-                await interaction.editReply('❌ **Erro 403 (Acesso Negado):** O Client ID no `.env` é inválido ou expirou. Por favor, gere um novo no site do SoundCloud.');
-            } else {
-                await interaction.editReply('❌ Erro ao tentar tocar. Verifique logs.');
-            }
+            console.error(error);
+            await interaction.editReply('❌ Erro crítico. O YouTube pode ter bloqueado o IP da hospedagem ou o link é inválido.');
         }
     }
 };
