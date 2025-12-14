@@ -3,10 +3,17 @@ const { joinVoiceChannel, createAudioPlayer, createAudioResource, NoSubscriberBe
 const axios = require('axios'); // REQUER: npm install axios
 const play = require('play-dl');
 
+// LISTA DE SERVIDORES (Se um cair, tenta o próximo)
+const COBALT_INSTANCES = [
+    'https://api.cobalt.tools/api/json',      // Oficial (Mais estável)
+    'https://cobalt.start.gg/api/json',       // Backup 1
+    'https://api.server.cobalt.tools/api/json' // Backup 2
+];
+
 module.exports = {
     data: {
         name: 'tocar',
-        description: 'Toca música via Túnel Wuk (Versão Leve)',
+        description: 'Toca música via Multi-Túnel (Anti-Queda)',
         options: [
             {
                 name: 'busca',
@@ -27,9 +34,9 @@ module.exports = {
         let videoThumb = null;
 
         try {
-            // --- PASSO 1: ACHAR O LINK (Usando play-dl que você já tem) ---
+            // --- PASSO 1: ACHAR O LINK (Se for texto) ---
             if (!query.startsWith('http')) {
-                // Pesquisa no YouTube usando play-dl (apenas metadados, costuma funcionar)
+                // Usa play-dl apenas para achar o link (leitura leve)
                 const results = await play.search(query, { limit: 1, source: { youtube: 'video' } });
                 
                 if (!results || results.length === 0) {
@@ -42,12 +49,9 @@ module.exports = {
                 videoThumb = video.thumbnails[0]?.url;
             }
 
-            // --- PASSO 2: O TÚNEL (Mirror wuk.sh) ---
-            const headers = {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-            };
+            // --- PASSO 2: O LOOP DA VITÓRIA (Tenta vários servidores) ---
+            let streamUrl = null;
+            let lastError = '';
 
             const body = {
                 url: videoUrl,
@@ -55,26 +59,32 @@ module.exports = {
                 aFormat: 'mp3'
             };
 
-            let streamUrl = null;
-            
-            // Tenta mirror wuk.sh
-            try {
-                const response = await axios.post('https://co.wuk.sh/api/json', body, { headers });
-                if (response.data && response.data.url) streamUrl = response.data.url;
-            } catch (err) {
-                console.log('Mirror falhou:', err.message);
-            }
-            
-            // Se falhar, tenta cobalt oficial
-            if (!streamUrl) {
+            const headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+            };
+
+            await interaction.editReply('🔄 **Processando áudio...**');
+
+            // Tenta cada servidor da lista
+            for (const apiUrl of COBALT_INSTANCES) {
                 try {
-                     const response2 = await axios.post('https://api.cobalt.tools/api/json', body, { headers });
-                     if (response2.data && response2.data.url) streamUrl = response2.data.url;
-                } catch (err) {}
+                    // console.log(`Tentando baixar via: ${apiUrl}`); // Debug
+                    const response = await axios.post(apiUrl, body, { headers, timeout: 10000 });
+                    
+                    if (response.data && response.data.url) {
+                        streamUrl = response.data.url;
+                        break; // SUCEEEESSO! Para o loop.
+                    }
+                } catch (err) {
+                    lastError = err.message;
+                    continue; // Falhou esse, vai pro próximo
+                }
             }
 
             if (!streamUrl) {
-                return interaction.editReply('❌ Erro: O servidor de áudio (Cobalt) recusou o link. Tente outro.');
+                return interaction.editReply(`❌ **Falha Total:** Tentei 3 servidores diferentes e todos recusaram ou estão fora do ar.\nErro final: ${lastError}`);
             }
 
             // --- PASSO 3: TOCAR ---
@@ -92,12 +102,17 @@ module.exports = {
             const embed = new EmbedBuilder()
                 .setTitle('🎶 Tocando Agora')
                 .setDescription(`**[${videoTitle}](${videoUrl})**`)
-                .setFooter({ text: 'Sistema: Cobalt Bypass' })
-                .setColor('Purple');
+                .setFooter({ text: 'Sistema: Multi-Server Bypass' })
+                .setColor('Green');
 
             if (videoThumb) embed.setThumbnail(videoThumb);
 
-            await interaction.editReply({ embeds: [embed] });
+            await interaction.editReply({ content: null, embeds: [embed] });
+
+            player.on('error', error => {
+                console.error('Erro Player:', error);
+                if(!interaction.replied) interaction.followUp({content: 'Erro na reprodução do áudio.', ephemeral:true});
+            });
 
         } catch (error) {
             console.error('Erro Fatal:', error);
