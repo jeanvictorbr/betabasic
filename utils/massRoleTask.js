@@ -1,103 +1,82 @@
 // utils/massRoleTask.js
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-const SAFE_SLEEP_INTERVAL = 50; // 50ms de pausa por ação
-const FETCH_LIMIT = 1000; // Buscar 1000 membros por vez
+const db = require('../database.js');
 
 /**
- * Executa uma tarefa de cargo em massa em segundo plano usando paginação.
- * @param {User} user - O usuário que iniciou a ação (para enviar DM).
- * @param {Guild} guild - O servidor onde a ação está ocorrendo.
- * @param {string} roleId - O ID do cargo a ser gerenciado.
- * @param {'add' | 'remove'} action - A ação a ser executada.
- * @param {'all' | 'no_roles'} filter - O filtro de membros.
- * @param {string} actionDescription - Descrição da ação para o log de DM.
+ * Executa a tarefa de cargo em massa
+ * @param {Guild} guild O servidor
+ * @param {Object} options { action: 'add'|'remove', roleId: string, filterRoles: string[], initiatorId: string }
  */
-async function runMassRoleTask(user, guild, roleId, action, filter, actionDescription) {
-    let role;
-    try {
-        // 1. Verifica o cargo primeiro
-        role = await guild.roles.fetch(roleId);
-        if (!role) throw new Error('Cargo não encontrado.');
-        if (!role.editable) throw new Error('Cargo não gerenciável (hierarquia).');
+async function startMassRoleTask(guild, options) {
+    console.log(`[MassRole] Iniciando tarefa para ${guild.name}. Ação: ${options.action}`);
 
-    } catch (err) {
-        console.error(`[MassRoleTask] Falha ao buscar/validar cargo ${roleId}: ${err.message}`);
-        try {
-            await user.send(`## ❌ Falha na Tarefa de Cargos\nNão consegui iniciar a tarefa. O cargo <@&${roleId}> não foi encontrado ou está acima do meu cargo no servidor \`${guild.name}\`.`);
-        } catch (dmError) { /* ignore */ }
-        return;
-    }
+    // Busca TODOS os membros (necessário para filtrar corretamente)
+    const members = await guild.members.fetch();
+    const role = guild.roles.cache.get(options.roleId);
+
+    if (!role) return;
 
     let successCount = 0;
     let failCount = 0;
-    let totalProcessed = 0;
-    let lastId = undefined; // Para paginação
+    let skippedCount = 0; // Para quem não passou no filtro
 
-    try {
-        // 2. Inicia o loop de paginação
-        while (true) {
-            const members = await guild.members.list({ limit: FETCH_LIMIT, after: lastId });
+    // Transforma array de filtro em Set para busca rápida (se houver filtros)
+    const hasFilter = options.filterRoles && options.filterRoles.length > 0;
+    const filterSet = new Set(options.filterRoles || []);
 
-            if (members.size === 0) {
-                break; // Terminou de buscar todos os membros
-            }
+    // Converte a coleção de membros para array para iterar
+    const memberArray = Array.from(members.values());
 
-            lastId = members.lastKey();
+    // Função de delay para não tomar rate limit
+    const delay = ms => new Promise(res => setTimeout(res, ms));
 
-            for (const [memberId, member] of members) {
-                totalProcessed++;
-                
-                // Filtra bots
-                if (member.user.bot) continue;
+    for (const member of memberArray) {
+        if (member.user.bot) continue; // Ignora bots
 
-                // Aplica filtro 'no_roles' (size 1 = apenas @everyone)
-                if (filter === 'no_roles' && member.roles.cache.size > 1) {
-                    continue;
-                }
-
-                // 3. Executa a Ação
-                try {
-                    if (action === 'add' && !member.roles.cache.has(roleId)) {
-                        await member.roles.add(roleId);
-                        successCount++;
-                        await sleep(SAFE_SLEEP_INTERVAL);
-                    } else if (action === 'remove' && member.roles.cache.has(roleId)) {
-                        await member.roles.remove(roleId);
-                        successCount++;
-                        await sleep(SAFE_SLEEP_INTERVAL);
-                    }
-                } catch (err) {
-                    console.warn(`[MassRoleTask] Falha ao ${action} cargo ${role.name} para ${member.user.tag}: ${err.message}`);
-                    failCount++;
-                }
+        // --- LÓGICA DO FILTRO ---
+        if (hasFilter) {
+            // Verifica se o membro tem ALGUM dos cargos do filtro
+            const hasRequiredRole = member.roles.cache.some(r => filterSet.has(r.id));
+            
+            if (!hasRequiredRole) {
+                skippedCount++;
+                continue; // Pula este membro, ele não tem os requisitos
             }
         }
-    } catch (err) {
-        // Erro principal (provavelmente falta de Intent GUILD_MEMBERS)
-        console.error(`[MassRoleTask] Erro fatal durante a paginação de membros: ${err.message}`);
+        // ------------------------
+
         try {
-            await user.send(`## ❌ Falha Grave na Tarefa de Cargos\nOcorreu um erro ao tentar buscar a lista de membros do servidor \`${guild.name}\`.\n\nVerifique se eu realmente possuo a **Intent \`GUILD_MEMBERS\`** ativada no Portal de Desenvolvedores do Discord.`);
-        } catch (dmError) { /* ignore */ }
-        return;
+            if (options.action === 'add') {
+                if (!member.roles.cache.has(role.id)) {
+                    await member.roles.add(role);
+                    successCount++;
+                    await delay(1000); // 1 segundo de delay para segurança
+                }
+            } else if (options.action === 'remove') {
+                if (member.roles.cache.has(role.id)) {
+                    await member.roles.remove(role);
+                    successCount++;
+                    await delay(1000);
+                }
+            }
+        } catch (error) {
+            console.error(`Erro ao alterar cargo de ${member.user.tag}:`, error.message);
+            failCount++;
+        }
     }
 
-
-    // 4. Tarefa concluída, enviar DM
+    // Log final (Opcional: enviar para canal de log)
+    console.log(`[MassRole] Finalizado. Sucesso: ${successCount}, Falhas: ${failCount}, Ignorados (Filtro): ${skippedCount}`);
+    
+    // Tenta avisar num canal de log se configurado (Exemplo simplificado)
     try {
-        const dmPayload = [
-            `## ✅ Operação de Cargos em Massa Concluída`,
-            `**Servidor:** \`${guild.name}\``,
-            `**Ação:** ${actionDescription}`,
-            `**Cargo:** ${role.name} (<@&${role.id}>)`,
-            `**Total de Membros Processados:** \`${totalProcessed}\``,
-            `**Membros Afetados:** \`${successCount}\``,
-            `**Falhas:** \`${failCount}\` (Membros que saíram ou com permissões mais altas)`
-        ].join('\n');
-        
-        await user.send(dmPayload);
-    } catch (dmError) {
-        console.error(`[MassRoleTask] Falha ao enviar DM de conclusão para ${user.tag}.`);
-    }
+        const settings = (await db.query('SELECT mod_log_channel FROM guild_settings WHERE guild_id = $1', [guild.id])).rows[0];
+        if (settings && settings.mod_log_channel) {
+            const channel = guild.channels.cache.get(settings.mod_log_channel);
+            if (channel) {
+                channel.send({ content: `✅ **Mass Role Finalizado**\nCargo: ${role.name}\nAção: ${options.action === 'add' ? 'Adicionar' : 'Remover'}\n\n✅ Aplicados: ${successCount}\n🚫 Falhas: ${failCount}\n⏭️ Ignorados (Filtro): ${skippedCount}\n\nSolicitado por: <@${options.initiatorId}>` });
+            }
+        }
+    } catch (e) {}
 }
 
-module.exports = runMassRoleTask;
+module.exports = startMassRoleTask;
