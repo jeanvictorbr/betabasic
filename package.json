@@ -1,6 +1,6 @@
 {
   "name": "basicflow-v2-completo",
-  "version": "2.0.1",
+  "version": "2.0.3",
   "description": "Bot multifuncional BasicFlow V2",
   "main": "index.js",
   "scripts": {
@@ -9,19 +9,12 @@
     "migrate": "node-pg-migrate",
     "migrate:create": "npm run migrate create --"
   },
-  "keywords": [
-    "discord",
-    "bot",
-    "discord.js"
-  ],
-  "author": "JeanVictor",
-  "license": "ISC",
   "dependencies": {
     "@discordjs/rest": "^2.2.0",
     "@discordjs/voice": "^0.16.1",
     "@discordjs/opus": "^0.9.0",
     "@discord-player/extractor": "^4.5.0",
-    "@distube/ytdl-core": "^4.13.5",
+    "play-dl": "^1.9.6",
     "@google/generative-ai": "^0.24.1",
     "ascii-table": "^0.0.9",
     "axios": "^1.12.2",

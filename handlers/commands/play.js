@@ -33,7 +33,7 @@ module.exports = async (interaction) => {
             return interaction.editReply('❌ Nenhuma música encontrada com esse nome.');
         }
 
-        // --- MODO 1: É UM LINK (Toca direto) ---
+        // --- MODO 1: É UM LINK OU RESULTADO ÚNICO (Toca direto) ---
         if (searchResult.tracks.length === 1 || query.startsWith('http')) {
             const { track } = await worker.player.play(memberChannel, searchResult, {
                 nodeOptions: {
