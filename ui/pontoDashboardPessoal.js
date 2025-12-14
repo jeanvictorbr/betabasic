@@ -1,3 +1,4 @@
+// ui/pontoDashboardPessoal.js
 const { ButtonBuilder, ActionRowBuilder, EmbedBuilder, ButtonStyle } = require('discord.js');
 const { formatDuration } = require('../utils/formatDuration.js');
 
@@ -5,7 +6,7 @@ module.exports = function generatePontoDashboard(interaction, session, status = 
     const startTime = new Date(session.start_time);
     let currentDuration = 0;
     
-    // --- CORREÇÃO AQUI ---
+    // Lógica de cálculo corrigida (TIMESTAMP)
     if (session.is_paused && session.last_pause_time) {
         // Se estiver pausado, a duração é: Hora da Pausa - Hora Início - Pausas Anteriores
         const pauseTime = new Date(session.last_pause_time);
@@ -14,9 +15,8 @@ module.exports = function generatePontoDashboard(interaction, session, status = 
         // Se estiver ativo, a duração é: Agora - Hora Início - Pausas Totais
         currentDuration = Date.now() - startTime.getTime() - (Number(session.total_paused_ms) || 0);
     }
-    // ---------------------
 
-    // Proteção para não mostrar negativo (pode acontecer por ms de diferença entre servidor/db)
+    // Proteção para não mostrar negativo
     if (currentDuration < 0) currentDuration = 0;
 
     const embed = new EmbedBuilder()
@@ -53,7 +53,7 @@ module.exports = function generatePontoDashboard(interaction, session, status = 
                     .setCustomId('ponto_end_service')
                     .setLabel('Finalizar')
                     .setStyle(ButtonStyle.Danger)
-                    .setEmoji('DQ')
+                    .setEmoji('⏹️') // <--- CORREÇÃO AQUI (Estava 'DQ')
             );
         } else {
             row.addComponents(
