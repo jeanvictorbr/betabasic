@@ -1,21 +1,24 @@
 // config/lavalink.js
 module.exports = [
+    // Node 1: Kieron Lavalink (Geralmente estável)
     {
-        name: 'AjieBlogs Public (SSL)',
-        url: 'lava-v4.ajieblogs.eu.org:443',
-        auth: 'https://ajieblogs.eu.org',
-        secure: true
+        name: 'Kieron Public Node',
+        url: 'lava.kieron.top:2333',
+        auth: 'youshallnotpass',
+        secure: false // http/ws (não SSL)
     },
+    // Node 2: Shirayuki (Backup 1)
     {
-        name: 'Komo Public',
-        url: 'lava.komo.id:80', // Porta 80 é comum para não-SSL
-        auth: 'komodroid',
+        name: 'Shirayuki Public',
+        url: 'lava.link:80', // Porta padrão HTTP
+        auth: '1234567812345678', // Senha comum em nodes públicos
         secure: false
     },
+    // Node 3: NodeLink (Backup 2 - SSL)
     {
-        name: 'Public Lavalink Vol.1',
-        url: 'lavalink.volunteers.gq:80',
-        auth: 'volunteers',
-        secure: false
+        name: 'NodeLink Public',
+        url: 'lavalink.nodelink.net:443',
+        auth: 'youshallnotpass',
+        secure: true // https/wss
     }
 ];
