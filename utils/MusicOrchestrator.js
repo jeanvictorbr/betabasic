@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const { Player } = require('discord-player');
+const { SpotifyExtractor, SoundCloudExtractor } = require('@discord-player/extractor'); // Importa manualmente
 const db = require('../database.js');
 const { decrypt } = require('./encryption.js');
 
@@ -9,7 +10,7 @@ class MusicOrchestrator {
     }
 
     async start() {
-        console.log('[Orchestrator] 🎻 Iniciando Sistema Nativo (Standard Extractors)...');
+        console.log('[Orchestrator] 🎻 Iniciando Sistema "SoundCloud Bridge" (Sem YouTube)...');
         
         const result = await db.query('SELECT * FROM music_workers WHERE is_active = true');
         const workersData = result.rows;
@@ -29,22 +30,28 @@ class MusicOrchestrator {
                 });
 
                 const player = new Player(workerClient, {
-                    skipFFmpeg: false,
+                    skipFFmpeg: false, // Usa ffmpeg-static
                     ytdlOptions: { quality: 'highestaudio', highWaterMark: 1 << 25 }
                 });
 
-                // --- CARREGAMENTO SIMPLIFICADO ---
+                // --- CONFIGURAÇÃO DE EXTRATORES ---
                 try {
-                    // Carrega o pacote padrão (Spotify, SoundCloud, Apple Music)
-                    // Ele usa automaticamente o @distube/ytdl-core que instalamos
-                    await player.extractors.loadDefault();
+                    // 1. Registra o SoundCloud (nossa fonte de áudio principal)
+                    await player.extractors.register(SoundCloudExtractor, {});
+
+                    // 2. Registra o Spotify e manda ele usar o SoundCloud como ponte
+                    // Isso evita o erro de "Could not load youtube library"
+                    await player.extractors.register(SpotifyExtractor, {
+                        bridgeProvider: 'soundcloud' 
+                    });
+
+                    // NÃO carregamos o loadDefault() para evitar o YouTubeExtractor
                     
-                    const loaded = player.extractors.store.keys();
-                    console.log(`[Worker ${data.name}] 📦 Extratores: ${Array.from(loaded).join(', ')}`);
+                    console.log(`[Worker ${data.name}] 📦 Modo Spotify -> SoundCloud Ativado.`);
                 } catch (extError) {
-                    console.error(`[Worker ${data.name}] ⚠️ Falha loadDefault: ${extError.message}`);
+                    console.error(`[Worker ${data.name}] ⚠️ Erro extratores: ${extError.message}`);
                 }
-                // ---------------------------------
+                // ----------------------------------
 
                 player.events.on('error', (queue, error) => console.log(`[${data.name}] Erro Fila: ${error.message}`));
                 player.events.on('playerError', (queue, error) => console.log(`[${data.name}] Erro Player: ${error.message}`));

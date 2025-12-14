@@ -20,8 +20,14 @@ module.exports = async (interaction) => {
         worker.currentGuild = interaction.guild.id; 
         worker.busy = true;
 
-        // --- MUDANÇA DE ESTRATÉGIA: SPOTIFY PRIMEIRO ---
-        // Se for um link (http), usa AUTO. Se for texto, força SPOTIFY.
+        // Se for Link do YouTube, avisamos que não suportamos (pois removemos a lib para evitar erros)
+        if (query.includes('youtube.com') || query.includes('youtu.be')) {
+            MusicOrchestrator.releaseWorker(worker.id);
+            return interaction.editReply('❌ **Links do YouTube estão desativados** para estabilidade.\n✅ Use **Links do Spotify**, **SoundCloud** ou pesquise pelo **Nome da música**.');
+        }
+
+        // Busca sempre no Spotify (Melhor qualidade de metadados)
+        // Se for link http (Spotify/SoundCloud), usa AUTO.
         const searchEngine = query.startsWith('http') ? QueryType.AUTO : QueryType.SPOTIFY_SEARCH;
 
         const searchResult = await worker.player.search(query, {
@@ -31,10 +37,10 @@ module.exports = async (interaction) => {
 
         if (!searchResult || !searchResult.tracks.length) {
             MusicOrchestrator.releaseWorker(worker.id);
-            return interaction.editReply('❌ Nenhuma música encontrada (Tentei no Spotify e YouTube).');
+            return interaction.editReply('❌ Nenhuma música encontrada.');
         }
 
-        // Se for link direto ou Playlist, toca direto
+        // Tocar Direto (Links ou Resultado único)
         if (searchResult.tracks.length === 1 || query.startsWith('http')) {
             const { track } = await worker.player.play(memberChannel, searchResult, {
                 nodeOptions: {
@@ -46,27 +52,23 @@ module.exports = async (interaction) => {
             });
 
             const embed = new EmbedBuilder()
-                .setColor('#1DB954') // Cor do Spotify
+                .setColor('#1DB954')
                 .setAuthor({ name: `Tocando via ${worker.name}`, iconURL: worker.client.user.displayAvatarURL() })
-                .setDescription(`🎵 **[${track.title}](${track.url})**\n*Fonte: ${track.source}*`)
-                .addFields(
-                    { name: 'Duração', value: track.duration, inline: true },
-                    { name: 'Artista', value: track.author, inline: true }
-                );
+                .setDescription(`🎵 **[${track.title}](${track.url})**\n*Artista: ${track.author}*`)
+                .setFooter({ text: 'Fonte: Spotify • Áudio: SoundCloud' });
 
             await interaction.editReply({ embeds: [embed] });
             setupQueueEvents(worker, interaction.guild.id);
             return;
         }
 
-        // --- MENU DE SELEÇÃO (SPOTIFY) ---
+        // Menu de Seleção
         const tracks = searchResult.tracks.slice(0, 10);
-        
         const options = tracks.map((track, i) => ({
             label: `${i + 1}. ${track.title}`.slice(0, 100),
             description: track.author.slice(0, 100),
             value: track.url, 
-            emoji: '🟢' // Emoji verde pra indicar Spotify
+            emoji: '🟢'
         }));
 
         const selectMenu = new StringSelectMenuBuilder()
@@ -79,8 +81,8 @@ module.exports = async (interaction) => {
         const embed = new EmbedBuilder()
             .setColor('#1DB954')
             .setTitle('🔎 Resultados do Spotify')
-            .setDescription(`Encontrei **${tracks.length}** resultados para \`${query}\`.\nO áudio será processado automaticamente.`)
-            .setFooter({ text: `Worker: ${worker.name}` });
+            .setDescription(`Encontrei **${tracks.length}** resultados para \`${query}\`.`)
+            .setFooter({ text: `Via ${worker.name}` });
 
         await interaction.editReply({ embeds: [embed], components: [row] });
 
