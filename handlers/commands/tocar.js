@@ -6,11 +6,11 @@ const db = require('../../database.js');
 module.exports = {
     data: {
         name: 'tocar',
-        description: 'Toca música do YouTube (Use /setup-youtube antes)',
+        description: 'Toca música do YouTube',
         options: [
             {
                 name: 'busca',
-                type: 3,
+                type: 3, // STRING
                 description: 'Nome da música ou Link',
                 required: true
             }
@@ -20,75 +20,107 @@ module.exports = {
         await interaction.deferReply();
 
         const channel = interaction.member.voice.channel;
-        if (!channel) return interaction.editReply('❌ Entre em um canal de voz.');
+        if (!channel) return interaction.editReply('❌ Você precisa estar em um canal de voz.');
 
+        // --- 1. CONFIGURAÇÃO DOS COOKIES (ANTIBLOQUEIO) ---
         try {
-            // --- RECUPERAÇÃO AUTOMÁTICA DE CREDENCIAIS ---
             let ytCookie = process.env.YOUTUBE_COOKIES;
 
-            // Se não tiver no .env, busca no Banco de Dados (onde o /setup-youtube salvou)
+            // Se não tiver no .env, tenta buscar do banco de dados (salvo pelo /setup-youtube)
             if (!ytCookie) {
                 const res = await db.query("SELECT maintenance_message FROM bot_status WHERE status_key = 'youtube_config'");
                 if (res.rows.length > 0) {
                     ytCookie = res.rows[0].maintenance_message;
-                    // Salva no process.env para as próximas vezes serem mais rápidas
-                    process.env.YOUTUBE_COOKIES = ytCookie;
+                    process.env.YOUTUBE_COOKIES = ytCookie; // Cache na memória
                 }
             }
 
-            // Aplica o cookie no play-dl
             if (ytCookie) {
                 await play.setToken({ youtube: { cookie: ytCookie } });
             }
-            // ---------------------------------------------
+        } catch (err) {
+            console.error('[YouTube Auth] Erro ao carregar cookies:', err);
+        }
 
-            const query = interaction.options.getString('busca');
-            let stream;
-            let trackInfo;
+        const query = interaction.options.getString('busca');
+        let stream;
+        let trackInfo;
 
-            // Busca (YouTube por padrão)
+        try {
+            // --- 2. LÓGICA DE BUSCA E STREAM ---
+            
+            // CASO 1: É um LINK
             if (query.startsWith('http')) {
                 const type = await play.validate(query); 
+
                 if (type === 'yt_video') {
                     const ytInfo = await play.video_info(query);
                     trackInfo = {
                         title: ytInfo.video_details.title,
                         url: ytInfo.video_details.url,
                         duration: ytInfo.video_details.durationRaw,
-                        thumbnail: ytInfo.video_details.thumbnails[0].url
+                        thumbnail: ytInfo.video_details.thumbnails[0]?.url
                     };
                     stream = await play.stream(query);
-                } else {
-                    // Tenta SoundCloud como fallback
-                    try {
-                       const scInfo = await play.soundcloud(query);
-                       trackInfo = { title: scInfo.name, url: scInfo.url, duration: 'SoundCloud', thumbnail: scInfo.thumbnail };
-                       stream = await play.stream(scInfo.url);
-                    } catch(e) {
-                       return interaction.editReply('❌ Link inválido ou não suportado (apenas YouTube/SoundCloud).');
-                    }
+                } 
+                else if (type === 'so_track') {
+                    // Fallback para SoundCloud se for link explícito
+                    const scInfo = await play.soundcloud(query);
+                    trackInfo = { 
+                        title: scInfo.name, 
+                        url: scInfo.url, 
+                        duration: 'SoundCloud', 
+                        thumbnail: scInfo.thumbnail 
+                    };
+                    stream = await play.stream(scInfo.url);
+                } 
+                else {
+                    return interaction.editReply('❌ Link não suportado. Use links do YouTube ou SoundCloud.');
                 }
-            } else {
-                const results = await play.search(query, { limit: 1, source: { youtube: 'video' } });
-                if (results.length === 0) return interaction.editReply('❌ Nada encontrado.');
-                
-                const ytVideo = results[0];
+            } 
+            // CASO 2: É UMA BUSCA (TEXTO)
+            else {
+                // Força a busca no YouTube
+                const results = await play.search(query, { 
+                    limit: 1, 
+                    source: { youtube: 'video' } 
+                });
+
+                if (!results || results.length === 0) {
+                    return interaction.editReply('❌ Nenhuma música encontrada com esse nome.');
+                }
+
+                const video = results[0];
+
+                // Verificação de Segurança (Corrige o erro 'undefined')
+                if (!video || !video.url) {
+                    console.error('Resultado da busca inválido:', video);
+                    return interaction.editReply('❌ Erro ao obter link do vídeo. Tente ser mais específico.');
+                }
+
                 trackInfo = {
-                    title: ytVideo.title,
-                    url: ytVideo.url,
-                    duration: ytVideo.durationRaw,
-                    thumbnail: ytVideo.thumbnails[0].url
+                    title: video.title,
+                    url: video.url,
+                    duration: video.durationRaw,
+                    thumbnail: video.thumbnails[0]?.url
                 };
-                stream = await play.stream(ytVideo.url);
+
+                // Cria o stream usando a URL garantida
+                stream = await play.stream(video.url);
             }
 
+            // --- 3. REPRODUÇÃO ---
             const resource = createAudioResource(stream.stream, { inputType: stream.type });
+            
             const connection = joinVoiceChannel({
                 channelId: channel.id,
                 guildId: interaction.guild.id,
                 adapterCreator: interaction.guild.voiceAdapterCreator,
             });
-            const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+
+            const player = createAudioPlayer({ 
+                behaviors: { noSubscriber: NoSubscriberBehavior.Play } 
+            });
 
             player.play(resource);
             connection.subscribe(player);
@@ -96,17 +128,33 @@ module.exports = {
             const embed = new EmbedBuilder()
                 .setTitle('🎶 Tocando Agora')
                 .setDescription(`**[${trackInfo.title}](${trackInfo.url})**`)
-                .setThumbnail(trackInfo.thumbnail)
-                .setColor('#FF0000');
+                .addFields({ name: 'Duração', value: trackInfo.duration || 'Live', inline: true })
+                .setThumbnail(trackInfo.thumbnail || null)
+                .setColor('#FF0000') // Vermelho YouTube
+                .setFooter({ text: 'Sistema de Música BasicFlow' });
 
             await interaction.editReply({ embeds: [embed] });
 
+            // Tratamento de erros do Player
+            player.on('error', error => {
+                console.error('Erro no AudioPlayer:', error);
+            });
+
         } catch (error) {
-            console.error('Erro no player:', error);
+            console.error('Erro Fatal no Comando Tocar:', error);
+            
+            let msg = '❌ Ocorreu um erro ao tentar tocar a música.';
+            
             if (error.message.includes('Sign in') || error.message.includes('429')) {
-                await interaction.editReply('⚠️ **YouTube Bloqueado!**\nUse o comando `/setup-youtube [colar]` com os dados da extensão Cookie-Editor para desbloquear.');
+                msg = '⚠️ **Bloqueio do YouTube:** O bot precisa de Cookies atualizados. Use `/setup-youtube` com o arquivo JSON.';
+            } else if (error.code === 'ERR_INVALID_URL') {
+                msg = '❌ Erro de URL inválida. O YouTube pode ter alterado algo, tente outro termo de busca.';
+            }
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.editReply(msg);
             } else {
-                await interaction.editReply('❌ Erro ao tocar. Tente outro link.');
+                await interaction.reply({ content: msg, ephemeral: true });
             }
         }
     }
