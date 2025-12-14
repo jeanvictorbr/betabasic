@@ -6,7 +6,7 @@ const { checkExpiringFeatures } = require('./utils/premiumExpiryMonitor.js');
 const { startPurgeMonitor } = require('./utils/purgeMonitor');
 const { checkTokenUsage } = require('./utils/tokenMonitor.js');
 const voiceHubManager = require('./utils/voiceHubManager.js');
-
+const MusicOrchestrator = require('./utils/MusicOrchestrator.js');
 const path = require('node:path');
 const automationsMonitor = require('./utils/automationsMonitor.js');
 const { EPHEMERAL_FLAG } = require('./utils/constants');
@@ -351,6 +351,14 @@ componentTypes.forEach(type => {
 
 
 console.log('--- Handlers Carregados ---');
+
+// --- INICIAR ORQUESTRA DE MÚSICA ---
+    try {
+        await MusicOrchestrator.start(); 
+    } catch (e) {
+        console.error('[Music] Falha ao iniciar orquestra:', e);
+    }
+    // --
 
 client.once(Events.ClientReady, async () => {
     startGiveawayMonitor(client);
