@@ -1,6 +1,6 @@
+// utils/MusicOrchestrator.js
 const { Client, GatewayIntentBits } = require('discord.js');
 const { Player } = require('discord-player');
-const { DefaultExtractors } = require('@discord-player/extractor');
 const db = require('../database.js');
 const { decrypt } = require('./encryption.js');
 
@@ -36,17 +36,18 @@ class MusicOrchestrator {
                 });
 
                 // --- A MÁGICA DO DISCORD PLAYER ---
-                // Criamos um Player dedicado para este bot específico
                 const player = new Player(workerClient, {
-                    skipFFmpeg: false, // Usa o ffmpeg local
+                    skipFFmpeg: false,
                     ytdlOptions: {
                         quality: 'highestaudio',
                         highWaterMark: 1 << 25
                     }
                 });
 
-                // Carrega extratores (YouTube, Spotify, SoundCloud)
-                await player.extractors.loadMulti(DefaultExtractors);
+                // --- CORREÇÃO AQUI ---
+                // Removemos o loadMulti que estava dando erro e usamos o padrão
+                await player.extractors.loadDefault();
+                // ---------------------
 
                 // Logs de erro do player
                 player.events.on('error', (queue, error) => {
@@ -63,7 +64,7 @@ class MusicOrchestrator {
                     id: workerClient.user.id,
                     name: data.name,
                     client: workerClient,
-                    player: player, // Guardamos o player aqui
+                    player: player, 
                     busy: false,
                     currentGuild: null
                 });
@@ -77,22 +78,25 @@ class MusicOrchestrator {
     }
 
     getFreeWorker(guildId) {
-        // 1. Prioridade: Se já tem um worker nesta guild, usa ele
+        // 1. Prioridade: Se já tem um worker nesta guild, usa ele (para filas)
         for (const worker of this.workers.values()) {
             if (worker.currentGuild === guildId) return worker;
         }
 
-        // 2. Busca um livre (que não esteja tocando nada)
+        // 2. Busca um livre
         for (const worker of this.workers.values()) {
-            // Verifica se o player tem nodes ativos
-            if (!worker.player.nodes.has(guildId) && !worker.busy) {
-                return worker;
+            // Verifica se o worker não está marcado como ocupado
+            // E verifica se o player dele não tem fila ativa na memória
+            if (!worker.busy && (!worker.player.nodes.has(guildId))) {
+                // Verificação extra: se ele não tem NENHUM node ativo em lugar nenhum
+                if (worker.player.nodes.cache.size === 0) {
+                    return worker;
+                }
             }
         }
         return null;
     }
     
-    // Libera o worker manualmente se precisar
     releaseWorker(workerId) {
         const worker = this.workers.get(workerId);
         if (worker) {
