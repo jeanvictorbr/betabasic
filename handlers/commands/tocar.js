@@ -5,111 +5,126 @@ const play = require('play-dl');
 module.exports = {
     data: {
         name: 'tocar',
-        description: 'Toca música (Sistema Híbrido: Pesquisa YT -> Áudio SC)',
+        description: 'Toca música (Modo Android Bypass)',
         options: [
             {
                 name: 'busca',
                 type: 3,
-                description: 'Nome da música',
+                description: 'Nome da música ou Link',
                 required: true
             }
         ]
     },
     async execute(interaction) {
         await interaction.deferReply();
-
         const channel = interaction.member.voice.channel;
-        if (!channel) return interaction.editReply('❌ Entre em um canal de voz.');
+        if (!channel) return interaction.editReply('❌ Canal de voz necessário.');
 
-        // Tenta configurar o Client ID do SoundCloud se tiver no .env
-        // Se não tiver, ele tenta gerar um automático (pode funcionar ou não, mas é melhor que o YT agora)
-        if (process.env.SOUNDCLOUD_CLIENT_ID) {
-            await play.setToken({ soundcloud: { client_id: process.env.SOUNDCLOUD_CLIENT_ID } });
-        } else {
-            await play.getFreeClientID().then((clientID) => {
-                play.setToken({ soundcloud: { client_id: clientID } });
-            }).catch(() => console.log('⚠️ Falha ao gerar ID automático SoundCloud.'));
-        }
+        // --- TRUQUE 1: Fingir ser um Celular Android ---
+        // Isso às vezes evita o erro "Sign in to confirm you are not a bot"
+        try {
+            play.setToken({
+                useragent: ['Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36']
+            });
+            
+            // Tenta pegar um ID do SoundCloud para emergências
+            if (!process.env.SOUNDCLOUD_CLIENT_ID) {
+                const freeID = await play.getFreeClientID().catch(() => null);
+                if (freeID) play.setToken({ soundcloud: { client_id: freeID } });
+            } else {
+                play.setToken({ soundcloud: { client_id: process.env.SOUNDCLOUD_CLIENT_ID } });
+            }
+        } catch (e) {}
 
         const query = interaction.options.getString('busca');
-        let trackInfo;
         let stream;
+        let trackInfo;
 
         try {
-            // PASSO 1: PESQUISAR (Usamos YouTube porque a pesquisa é melhor)
-            // Se for link, detectamos o que é. Se for texto, buscamos no YouTube.
-            
-            let searchTerm = query;
-            let thumbnail = '';
-            let title = '';
-            let duration = '';
-            let url = '';
-
-            // Se for Link do YouTube, pegamos apenas o TÍTULO para buscar no SoundCloud
-            if (query.includes('youtube.com') || query.includes('youtu.be')) {
-                if (play.yt_validate(query) === 'video') {
-                     // Tenta pegar info básica sem baixar (menos chance de block)
-                     const ytData = await play.video_info(query).catch(() => null);
-                     if (ytData) {
-                         searchTerm = ytData.video_details.title;
-                         thumbnail = ytData.video_details.thumbnails[0].url;
-                         title = ytData.video_details.title;
-                         duration = ytData.video_details.durationRaw;
-                         url = query;
-                     }
+            // --- LÓGICA DE PROCURA ---
+            if (query.startsWith('http')) {
+                // É LINK
+                const type = await play.validate(query); 
+                
+                if (type === 'yt_video') {
+                    // Tenta YouTube com o disfarce de Android
+                    const ytInfo = await play.video_info(query);
+                    trackInfo = {
+                        title: ytInfo.video_details.title,
+                        url: ytInfo.video_details.url,
+                        duration: ytInfo.video_details.durationRaw,
+                        thumbnail: ytInfo.video_details.thumbnails[0]?.url
+                    };
+                    stream = await play.stream(query);
+                } 
+                else if (type === 'so_track') {
+                    // SoundCloud direto
+                    const scInfo = await play.soundcloud(query);
+                    trackInfo = { title: scInfo.name, url: scInfo.url, duration: 'SoundCloud', thumbnail: scInfo.thumbnail };
+                    stream = await play.stream(scInfo.url);
+                }
+                else {
+                    return interaction.editReply('❌ Link não suportado.');
+                }
+            } else {
+                // É TEXTO (BUSCA)
+                // O Pulo do Gato: Se o YouTube falhar, ele pula pro SoundCloud SOZINHO
+                try {
+                    // Tenta YouTube primeiro
+                    const results = await play.search(query, { limit: 1, source: { youtube: 'video' } });
+                    if (results.length > 0) {
+                        const video = results[0];
+                        trackInfo = {
+                            title: video.title,
+                            url: video.url,
+                            duration: video.durationRaw,
+                            thumbnail: video.thumbnails[0]?.url
+                        };
+                        stream = await play.stream(video.url);
+                    } else {
+                        throw new Error('Nada no YT');
+                    }
+                } catch (ytError) {
+                    console.log('YouTube falhou, tentando SoundCloud...', ytError.message);
+                    
+                    // FALLBACK: Se o YouTube bloqueou, busca no SoundCloud transparente
+                    const scResults = await play.search(query, { limit: 1, source: { soundcloud: 'tracks' } });
+                    if (!scResults || scResults.length === 0) return interaction.editReply('❌ Erro: YouTube bloqueou o IP e não achei no SoundCloud.');
+                    
+                    const scTrack = scResults[0];
+                    trackInfo = {
+                        title: scTrack.name,
+                        url: scTrack.url,
+                        duration: 'SoundCloud (Backup)',
+                        thumbnail: scTrack.thumbnail
+                    };
+                    stream = await play.stream(scTrack.url);
                 }
             }
 
-            // PASSO 2: ENCONTRAR O ÁUDIO NO SOUNDCLOUD (Bypass de Bloqueio)
-            // Pesquisa no SoundCloud usando o nome que achamos no YouTube ou o texto digitado
-            const scResults = await play.search(searchTerm, {
-                limit: 1,
-                source: { soundcloud: 'tracks' }
-            });
-
-            if (!scResults || scResults.length === 0) {
-                return interaction.editReply('❌ Não encontrei uma versão de áudio acessível para esta música.');
-            }
-
-            const scTrack = scResults[0];
-
-            // Se não pegamos os dados do YouTube antes, usamos os do SoundCloud
-            if (!title) {
-                title = scTrack.name;
-                thumbnail = scTrack.thumbnail;
-                duration = 'SoundCloud';
-                url = scTrack.url;
-            }
-
-            // PASSO 3: TOCAR (Do SoundCloud)
-            stream = await play.stream(scTrack.url);
-
+            // --- TOCAR ---
             const resource = createAudioResource(stream.stream, { inputType: stream.type });
             const connection = joinVoiceChannel({
                 channelId: channel.id,
                 guildId: interaction.guild.id,
                 adapterCreator: interaction.guild.voiceAdapterCreator,
             });
-
             const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
 
             player.play(resource);
             connection.subscribe(player);
 
             const embed = new EmbedBuilder()
-                .setTitle('🎶 Tocando Agora')
-                .setDescription(`**[${title}](${url})**`)
-                .setFooter({ text: 'Fonte de Áudio: SoundCloud (Mirror)' })
-                .setThumbnail(thumbnail)
-                .setColor('Orange');
-
-            if (duration) embed.addFields({ name: 'Duração', value: duration, inline: true });
+                .setTitle(trackInfo.duration.includes('Backup') ? '🎶 Tocando (Modo Backup)' : '🎶 Tocando Agora')
+                .setDescription(`**[${trackInfo.title}](${trackInfo.url})**`)
+                .setThumbnail(trackInfo.thumbnail)
+                .setColor(trackInfo.duration.includes('Backup') ? 'Orange' : 'Red');
 
             await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error(error);
-            await interaction.editReply('❌ Erro: ' + error.message);
+            console.error('Erro Final:', error);
+            await interaction.editReply('❌ Não foi possível tocar. O bloqueio da hospedagem está muito forte.');
         }
     }
 };
