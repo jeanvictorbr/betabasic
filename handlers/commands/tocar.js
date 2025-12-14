@@ -1,16 +1,17 @@
 const { EmbedBuilder } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, NoSubscriberBehavior } = require('@discordjs/voice');
 const play = require('play-dl');
+const db = require('../../database.js');
 
 module.exports = {
     data: {
         name: 'tocar',
-        description: 'Toca música do YouTube ou SoundCloud',
+        description: 'Toca música do YouTube (Use /setup-youtube antes)',
         options: [
             {
                 name: 'busca',
-                type: 3, // STRING
-                description: 'Nome da música ou Link (YouTube/SoundCloud)',
+                type: 3,
+                description: 'Nome da música ou Link',
                 required: true
             }
         ]
@@ -19,23 +20,36 @@ module.exports = {
         await interaction.deferReply();
 
         const channel = interaction.member.voice.channel;
-        if (!channel) {
-            return interaction.editReply('❌ Você precisa estar em um canal de voz.');
-        }
-
-        const query = interaction.options.getString('busca');
-        let stream;
-        let trackInfo;
+        if (!channel) return interaction.editReply('❌ Entre em um canal de voz.');
 
         try {
-            // --- LÓGICA HÍBRIDA (YouTube + SoundCloud) ---
-            
-            // 1. Verifica se é um LINK
+            // --- RECUPERAÇÃO AUTOMÁTICA DE CREDENCIAIS ---
+            let ytCookie = process.env.YOUTUBE_COOKIES;
+
+            // Se não tiver no .env, busca no Banco de Dados (onde o /setup-youtube salvou)
+            if (!ytCookie) {
+                const res = await db.query("SELECT maintenance_message FROM bot_status WHERE status_key = 'youtube_config'");
+                if (res.rows.length > 0) {
+                    ytCookie = res.rows[0].maintenance_message;
+                    // Salva no process.env para as próximas vezes serem mais rápidas
+                    process.env.YOUTUBE_COOKIES = ytCookie;
+                }
+            }
+
+            // Aplica o cookie no play-dl
+            if (ytCookie) {
+                await play.setToken({ youtube: { cookie: ytCookie } });
+            }
+            // ---------------------------------------------
+
+            const query = interaction.options.getString('busca');
+            let stream;
+            let trackInfo;
+
+            // Busca (YouTube por padrão)
             if (query.startsWith('http')) {
                 const type = await play.validate(query); 
-
                 if (type === 'yt_video') {
-                    // LINK DO YOUTUBE
                     const ytInfo = await play.video_info(query);
                     trackInfo = {
                         title: ytInfo.video_details.title,
@@ -44,32 +58,20 @@ module.exports = {
                         thumbnail: ytInfo.video_details.thumbnails[0].url
                     };
                     stream = await play.stream(query);
-
-                } else if (type === 'so_track') {
-                    // LINK DO SOUNDCLOUD (Ainda tenta, se tiver chave no .env)
-                    // Se não tiver chave, isso aqui pode falhar, mas o foco agora é YT
-                    trackInfo = await play.soundcloud(query);
-                    trackInfo = {
-                        title: trackInfo.name,
-                        url: trackInfo.url,
-                        duration: 'SoundCloud',
-                        thumbnail: trackInfo.thumbnail
-                    };
-                    stream = await play.stream(trackInfo.url);
                 } else {
-                    return interaction.editReply('❌ Link não suportado. Use links do YouTube ou SoundCloud.');
+                    // Tenta SoundCloud como fallback
+                    try {
+                       const scInfo = await play.soundcloud(query);
+                       trackInfo = { title: scInfo.name, url: scInfo.url, duration: 'SoundCloud', thumbnail: scInfo.thumbnail };
+                       stream = await play.stream(scInfo.url);
+                    } catch(e) {
+                       return interaction.editReply('❌ Link inválido ou não suportado (apenas YouTube/SoundCloud).');
+                    }
                 }
             } else {
-                // 2. BUSCA POR TEXTO (Agora usa YouTube por padrão -> Mais estável)
-                const results = await play.search(query, {
-                    limit: 1,
-                    source: { youtube: 'video' } // Mudamos para YouTube
-                });
-
-                if (results.length === 0) {
-                    return interaction.editReply('❌ Nenhuma música encontrada.');
-                }
-
+                const results = await play.search(query, { limit: 1, source: { youtube: 'video' } });
+                if (results.length === 0) return interaction.editReply('❌ Nada encontrado.');
+                
                 const ytVideo = results[0];
                 trackInfo = {
                     title: ytVideo.title,
@@ -77,24 +79,16 @@ module.exports = {
                     duration: ytVideo.durationRaw,
                     thumbnail: ytVideo.thumbnails[0].url
                 };
-
                 stream = await play.stream(ytVideo.url);
             }
 
-            // --- PLAYER ---
-            const resource = createAudioResource(stream.stream, {
-                inputType: stream.type
-            });
-
+            const resource = createAudioResource(stream.stream, { inputType: stream.type });
             const connection = joinVoiceChannel({
                 channelId: channel.id,
                 guildId: interaction.guild.id,
                 adapterCreator: interaction.guild.voiceAdapterCreator,
             });
-
-            const player = createAudioPlayer({
-                behaviors: { noSubscriber: NoSubscriberBehavior.Play }
-            });
+            const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
 
             player.play(resource);
             connection.subscribe(player);
@@ -102,22 +96,18 @@ module.exports = {
             const embed = new EmbedBuilder()
                 .setTitle('🎶 Tocando Agora')
                 .setDescription(`**[${trackInfo.title}](${trackInfo.url})**`)
-                .addFields(
-                    { name: 'Duração', value: trackInfo.duration || 'Live', inline: true }
-                )
                 .setThumbnail(trackInfo.thumbnail)
-                .setColor('#FF0000'); // Vermelho YouTube
+                .setColor('#FF0000');
 
             await interaction.editReply({ embeds: [embed] });
 
-            player.on('error', error => {
-                console.error('Erro no player:', error);
-                if (!interaction.replied) interaction.followUp({ content: '❌ Erro ao reproduzir áudio.', ephemeral: true });
-            });
-
         } catch (error) {
-            console.error(error);
-            await interaction.editReply('❌ Erro crítico. O YouTube pode ter bloqueado o IP da hospedagem ou o link é inválido.');
+            console.error('Erro no player:', error);
+            if (error.message.includes('Sign in') || error.message.includes('429')) {
+                await interaction.editReply('⚠️ **YouTube Bloqueado!**\nUse o comando `/setup-youtube [colar]` com os dados da extensão Cookie-Editor para desbloquear.');
+            } else {
+                await interaction.editReply('❌ Erro ao tocar. Tente outro link.');
+            }
         }
     }
 };
