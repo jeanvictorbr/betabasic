@@ -1,7 +1,5 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const { Player } = require('discord-player');
-// Importa a nova lib estável para stream
-const { YoutubeI } = require("discord-player-youtubei");
 const db = require('../database.js');
 const { decrypt } = require('./encryption.js');
 
@@ -11,7 +9,7 @@ class MusicOrchestrator {
     }
 
     async start() {
-        console.log('[Orchestrator] 🎻 Iniciando Sistema Híbrido (Spotify Search + YouTubeI Stream)...');
+        console.log('[Orchestrator] 🎻 Iniciando Sistema Nativo (Standard Extractors)...');
         
         const result = await db.query('SELECT * FROM music_workers WHERE is_active = true');
         const workersData = result.rows;
@@ -35,21 +33,19 @@ class MusicOrchestrator {
                     ytdlOptions: { quality: 'highestaudio', highWaterMark: 1 << 25 }
                 });
 
-                // --- CARREGAMENTO DOS EXTRATORES ---
+                // --- CARREGAMENTO SIMPLIFICADO ---
                 try {
-                    // 1. Registra o YoutubeI (Engine de áudio mais forte)
-                    await player.extractors.register(YoutubeI, {});
-                    
-                    // 2. Carrega os padrões (Inclui Spotify para busca)
+                    // Carrega o pacote padrão (Spotify, SoundCloud, Apple Music)
+                    // Ele usa automaticamente o @distube/ytdl-core que instalamos
                     await player.extractors.loadDefault();
                     
-                    console.log(`[Worker ${data.name}] 📦 Extratores carregados: Spotify, YoutubeI, SoundCloud.`);
+                    const loaded = player.extractors.store.keys();
+                    console.log(`[Worker ${data.name}] 📦 Extratores: ${Array.from(loaded).join(', ')}`);
                 } catch (extError) {
-                    console.error(`[Worker ${data.name}] ⚠️ Erro extratores: ${extError.message}`);
+                    console.error(`[Worker ${data.name}] ⚠️ Falha loadDefault: ${extError.message}`);
                 }
-                // ----------------------------------
+                // ---------------------------------
 
-                // Tratamento de Erros para não derrubar o bot
                 player.events.on('error', (queue, error) => console.log(`[${data.name}] Erro Fila: ${error.message}`));
                 player.events.on('playerError', (queue, error) => console.log(`[${data.name}] Erro Player: ${error.message}`));
 
@@ -67,23 +63,20 @@ class MusicOrchestrator {
                 console.log(`[Orchestrator] ✅ Worker ${data.name} ONLINE.`);
 
             } catch (error) {
-                console.error(`[Orchestrator] ❌ Falha ao iniciar ${data.name}:`, error.message);
+                console.error(`[Orchestrator] ❌ Falha no worker ${data.name}:`, error.message);
             }
         }
     }
 
     getFreeWorker(guildId) {
-        // Tenta reconectar a um worker que já esteja nesta guilda
         for (const worker of this.workers.values()) {
             if (worker.currentGuild === guildId) return worker;
-            // Checagem extra de voz
             const guild = worker.client.guilds.cache.get(guildId);
             if (guild && guild.members.me && guild.members.me.voice.channelId) {
                 return worker; 
             }
         }
 
-        // Busca livre
         for (const worker of this.workers.values()) {
             if (!worker.busy && worker.player.nodes.cache.size === 0) {
                 return worker;

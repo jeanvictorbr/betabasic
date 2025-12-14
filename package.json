@@ -1,6 +1,6 @@
 {
   "name": "basicflow-v2-completo",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "description": "Bot multifuncional BasicFlow V2",
   "main": "index.js",
   "scripts": {
@@ -14,7 +14,7 @@
     "@discordjs/voice": "^0.16.1",
     "@discordjs/opus": "^0.9.0",
     "@discord-player/extractor": "^4.5.0",
-    "discord-player-youtubei": "^1.1.0",
+    "@distube/ytdl-core": "^4.13.5",
     "@google/generative-ai": "^0.24.1",
     "ascii-table": "^0.0.9",
     "axios": "^1.12.2",
