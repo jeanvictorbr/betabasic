@@ -1,5 +1,7 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const { Player } = require('discord-player');
+// Importa a nova lib estável para stream
+const { YoutubeI } = require("discord-player-youtubei");
 const db = require('../database.js');
 const { decrypt } = require('./encryption.js');
 
@@ -9,7 +11,7 @@ class MusicOrchestrator {
     }
 
     async start() {
-        console.log('[Orchestrator] 🎻 Iniciando Sistema Nativo (Discord-Player)...');
+        console.log('[Orchestrator] 🎻 Iniciando Sistema Híbrido (Spotify Search + YouTubeI Stream)...');
         
         const result = await db.query('SELECT * FROM music_workers WHERE is_active = true');
         const workersData = result.rows;
@@ -22,10 +24,7 @@ class MusicOrchestrator {
         for (const data of workersData) {
             try {
                 const token = decrypt({ content: data.token_enc, iv: data.iv });
-                if (!token) {
-                    console.error(`[Orchestrator] ❌ Token inválido para ${data.name}`);
-                    continue;
-                }
+                if (!token) continue;
 
                 const workerClient = new Client({
                     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates]
@@ -36,16 +35,21 @@ class MusicOrchestrator {
                     ytdlOptions: { quality: 'highestaudio', highWaterMark: 1 << 25 }
                 });
 
-                // --- CARREGAMENTO DE EXTRATORES ---
+                // --- CARREGAMENTO DOS EXTRATORES ---
                 try {
+                    // 1. Registra o YoutubeI (Engine de áudio mais forte)
+                    await player.extractors.register(YoutubeI, {});
+                    
+                    // 2. Carrega os padrões (Inclui Spotify para busca)
                     await player.extractors.loadDefault();
-                    // DEBUG: Mostra o que carregou
-                    console.log(`[Worker ${data.name}] 📦 Extratores ativos: ${player.extractors.store.keys().map(k => k).join(', ')}`);
+                    
+                    console.log(`[Worker ${data.name}] 📦 Extratores carregados: Spotify, YoutubeI, SoundCloud.`);
                 } catch (extError) {
-                    console.error(`[Worker ${data.name}] ⚠️ Erro ao carregar extratores: ${extError.message}`);
+                    console.error(`[Worker ${data.name}] ⚠️ Erro extratores: ${extError.message}`);
                 }
                 // ----------------------------------
 
+                // Tratamento de Erros para não derrubar o bot
                 player.events.on('error', (queue, error) => console.log(`[${data.name}] Erro Fila: ${error.message}`));
                 player.events.on('playerError', (queue, error) => console.log(`[${data.name}] Erro Player: ${error.message}`));
 
@@ -63,23 +67,24 @@ class MusicOrchestrator {
                 console.log(`[Orchestrator] ✅ Worker ${data.name} ONLINE.`);
 
             } catch (error) {
-                console.error(`[Orchestrator] ❌ CRÍTICO: Worker ${data.name} falhou:`, error.message);
+                console.error(`[Orchestrator] ❌ Falha ao iniciar ${data.name}:`, error.message);
             }
         }
     }
 
     getFreeWorker(guildId) {
+        // Tenta reconectar a um worker que já esteja nesta guilda
         for (const worker of this.workers.values()) {
             if (worker.currentGuild === guildId) return worker;
-            // Verifica se está no canal de voz da guilda (reconect)
+            // Checagem extra de voz
             const guild = worker.client.guilds.cache.get(guildId);
             if (guild && guild.members.me && guild.members.me.voice.channelId) {
                 return worker; 
             }
         }
 
+        // Busca livre
         for (const worker of this.workers.values()) {
-            // Verifica se está livre E sem fila ativa
             if (!worker.busy && worker.player.nodes.cache.size === 0) {
                 return worker;
             }

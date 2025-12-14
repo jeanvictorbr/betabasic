@@ -11,29 +11,30 @@ module.exports = async (interaction) => {
     await interaction.deferReply();
     const query = interaction.options.getString('busca');
 
-    // 1. Pega um Worker Livre
     const worker = MusicOrchestrator.getFreeWorker(interaction.guild.id);
     if (!worker) {
         return interaction.editReply('⚠️ **Todos os bots de música estão ocupados!** Tente novamente mais tarde.');
     }
 
     try {
-        // Marca o worker como ocupado temporariamente para a busca
         worker.currentGuild = interaction.guild.id; 
         worker.busy = true;
 
-        // 2. Realiza a Pesquisa
+        // --- MUDANÇA DE ESTRATÉGIA: SPOTIFY PRIMEIRO ---
+        // Se for um link (http), usa AUTO. Se for texto, força SPOTIFY.
+        const searchEngine = query.startsWith('http') ? QueryType.AUTO : QueryType.SPOTIFY_SEARCH;
+
         const searchResult = await worker.player.search(query, {
             requestedBy: interaction.user,
-            searchEngine: QueryType.AUTO
+            searchEngine: searchEngine
         });
 
         if (!searchResult || !searchResult.tracks.length) {
             MusicOrchestrator.releaseWorker(worker.id);
-            return interaction.editReply('❌ Nenhuma música encontrada com esse nome.');
+            return interaction.editReply('❌ Nenhuma música encontrada (Tentei no Spotify e YouTube).');
         }
 
-        // --- MODO 1: É UM LINK OU RESULTADO ÚNICO (Toca direto) ---
+        // Se for link direto ou Playlist, toca direto
         if (searchResult.tracks.length === 1 || query.startsWith('http')) {
             const { track } = await worker.player.play(memberChannel, searchResult, {
                 nodeOptions: {
@@ -45,12 +46,12 @@ module.exports = async (interaction) => {
             });
 
             const embed = new EmbedBuilder()
-                .setColor('#5865F2')
+                .setColor('#1DB954') // Cor do Spotify
                 .setAuthor({ name: `Tocando via ${worker.name}`, iconURL: worker.client.user.displayAvatarURL() })
-                .setDescription(`🎵 **${track.title}**`)
+                .setDescription(`🎵 **[${track.title}](${track.url})**\n*Fonte: ${track.source}*`)
                 .addFields(
                     { name: 'Duração', value: track.duration, inline: true },
-                    { name: 'Canal', value: `<#${memberChannel.id}>`, inline: true }
+                    { name: 'Artista', value: track.author, inline: true }
                 );
 
             await interaction.editReply({ embeds: [embed] });
@@ -58,39 +59,35 @@ module.exports = async (interaction) => {
             return;
         }
 
-        // --- MODO 2: É UMA PESQUISA (Mostra Menu) ---
-        
-        // Pega as 10 primeiras músicas
+        // --- MENU DE SELEÇÃO (SPOTIFY) ---
         const tracks = searchResult.tracks.slice(0, 10);
         
         const options = tracks.map((track, i) => ({
             label: `${i + 1}. ${track.title}`.slice(0, 100),
             description: track.author.slice(0, 100),
-            value: track.url, // O valor é o link da música
-            emoji: '🎵'
+            value: track.url, 
+            emoji: '🟢' // Emoji verde pra indicar Spotify
         }));
 
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`play_select_${worker.id}`) // Passa o ID do worker que vai tocar
-            .setPlaceholder('Selecione a música para tocar...')
+            .setCustomId(`play_select_${worker.id}`)
+            .setPlaceholder('Selecione a música do Spotify...')
             .addOptions(options);
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
         const embed = new EmbedBuilder()
-            .setColor('#2b2d31')
-            .setTitle('🔎 Resultados da Pesquisa')
-            .setDescription(`Encontrei **${tracks.length}** resultados para \`${query}\`.\nSelecione abaixo qual deseja ouvir.`)
-            .setFooter({ text: `Via ${worker.name}` });
+            .setColor('#1DB954')
+            .setTitle('🔎 Resultados do Spotify')
+            .setDescription(`Encontrei **${tracks.length}** resultados para \`${query}\`.\nO áudio será processado automaticamente.`)
+            .setFooter({ text: `Worker: ${worker.name}` });
 
         await interaction.editReply({ embeds: [embed], components: [row] });
-
-        // Nota: O worker continua ocupado esperando a seleção no próximo arquivo handler
 
     } catch (error) {
         console.error(`[Play] Erro:`, error);
         MusicOrchestrator.releaseWorker(worker.id);
-        await interaction.editReply('❌ Erro ao buscar a música. Tente novamente.');
+        await interaction.editReply('❌ Erro ao buscar. Tente novamente.');
     }
 };
 
