@@ -20,27 +20,34 @@ module.exports = async (interaction) => {
         worker.currentGuild = interaction.guild.id; 
         worker.busy = true;
 
-        // Se for Link do YouTube, avisamos que não suportamos (pois removemos a lib para evitar erros)
-        if (query.includes('youtube.com') || query.includes('youtu.be')) {
-            MusicOrchestrator.releaseWorker(worker.id);
-            return interaction.editReply('❌ **Links do YouTube estão desativados** para estabilidade.\n✅ Use **Links do Spotify**, **SoundCloud** ou pesquise pelo **Nome da música**.');
-        }
-
-        // Busca sempre no Spotify (Melhor qualidade de metadados)
-        // Se for link http (Spotify/SoundCloud), usa AUTO.
-        const searchEngine = query.startsWith('http') ? QueryType.AUTO : QueryType.SPOTIFY_SEARCH;
-
-        const searchResult = await worker.player.search(query, {
+        // 1. TENTATIVA PRINCIPAL: Spotify (Melhor qualidade de dados)
+        let searchEngine = query.startsWith('http') ? QueryType.AUTO : QueryType.SPOTIFY_SEARCH;
+        
+        let searchResult = await worker.player.search(query, {
             requestedBy: interaction.user,
             searchEngine: searchEngine
-        });
+        }).catch(() => null);
 
+        // 2. FALLBACK (PLANO B): Se Spotify falhar ou vier vazio, tenta SoundCloud
         if (!searchResult || !searchResult.tracks.length) {
-            MusicOrchestrator.releaseWorker(worker.id);
-            return interaction.editReply('❌ Nenhuma música encontrada.');
+            console.log(`[Play] Busca Spotify vazia para "${query}". Tentando SoundCloud...`);
+            
+            // Se for link, não tem fallback (link é específico). Se for texto, tenta SC.
+            if (!query.startsWith('http')) {
+                searchResult = await worker.player.search(query, {
+                    requestedBy: interaction.user,
+                    searchEngine: QueryType.SOUNDCLOUD_SEARCH
+                }).catch(() => null);
+            }
         }
 
-        // Tocar Direto (Links ou Resultado único)
+        // Se falhar nos dois
+        if (!searchResult || !searchResult.tracks.length) {
+            MusicOrchestrator.releaseWorker(worker.id);
+            return interaction.editReply('❌ **Não encontrei nada.**\nTentei no Spotify e no SoundCloud e ambos falharam. Tente usar um link direto.');
+        }
+
+        // --- TOCAR DIRETO (Links ou Resultado Único) ---
         if (searchResult.tracks.length === 1 || query.startsWith('http')) {
             const { track } = await worker.player.play(memberChannel, searchResult, {
                 nodeOptions: {
@@ -52,44 +59,46 @@ module.exports = async (interaction) => {
             });
 
             const embed = new EmbedBuilder()
-                .setColor('#1DB954')
+                .setColor('#5865F2')
                 .setAuthor({ name: `Tocando via ${worker.name}`, iconURL: worker.client.user.displayAvatarURL() })
                 .setDescription(`🎵 **[${track.title}](${track.url})**\n*Artista: ${track.author}*`)
-                .setFooter({ text: 'Fonte: Spotify • Áudio: SoundCloud' });
+                .setFooter({ text: `Fonte: ${track.source}` }); // Mostra de onde veio (Spotify/SoundCloud)
 
             await interaction.editReply({ embeds: [embed] });
             setupQueueEvents(worker, interaction.guild.id);
             return;
         }
 
-        // Menu de Seleção
+        // --- MOSTRAR MENU DE SELEÇÃO ---
+        // Pega os 10 primeiros resultados (seja do Spotify ou SoundCloud)
         const tracks = searchResult.tracks.slice(0, 10);
+        
         const options = tracks.map((track, i) => ({
             label: `${i + 1}. ${track.title}`.slice(0, 100),
-            description: track.author.slice(0, 100),
+            description: track.author ? track.author.slice(0, 100) : 'Desconhecido',
             value: track.url, 
-            emoji: '🟢'
+            emoji: track.source === 'spotify' ? '🟢' : '🟠' // Verde (Spotify) ou Laranja (SoundCloud)
         }));
 
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId(`play_select_${worker.id}`)
-            .setPlaceholder('Selecione a música do Spotify...')
+            .setPlaceholder('Selecione a música para tocar...')
             .addOptions(options);
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
         const embed = new EmbedBuilder()
-            .setColor('#1DB954')
-            .setTitle('🔎 Resultados do Spotify')
-            .setDescription(`Encontrei **${tracks.length}** resultados para \`${query}\`.`)
-            .setFooter({ text: `Via ${worker.name}` });
+            .setColor('#2b2d31')
+            .setTitle(`🔎 Resultados da Busca (${searchResult.tracks[0].source})`)
+            .setDescription(`Encontrei **${tracks.length}** resultados para \`${query}\`.\nSelecione abaixo para tocar.`)
+            .setFooter({ text: `Worker: ${worker.name}` });
 
         await interaction.editReply({ embeds: [embed], components: [row] });
 
     } catch (error) {
-        console.error(`[Play] Erro:`, error);
+        console.error(`[Play] Erro Crítico:`, error);
         MusicOrchestrator.releaseWorker(worker.id);
-        await interaction.editReply('❌ Erro ao buscar. Tente novamente.');
+        await interaction.editReply('❌ Ocorreu um erro interno ao tentar processar a música.');
     }
 };
 
