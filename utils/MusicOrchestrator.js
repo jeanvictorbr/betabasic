@@ -1,92 +1,105 @@
 const { Client, GatewayIntentBits } = require('discord.js');
-const { Shoukaku, Connectors } = require('shoukaku');
+const { Player } = require('discord-player');
+const { DefaultExtractors } = require('@discord-player/extractor');
 const db = require('../database.js');
 const { decrypt } = require('./encryption.js');
-const Nodes = require('../config/lavalink.js');
 
 class MusicOrchestrator {
     constructor() {
-        this.workers = new Map(); // Armazena { client, shoukaku, id }
+        this.workers = new Map(); // Armazena { id, client, player, name, busy, currentGuild }
     }
 
     async start() {
-        console.log('[Orchestrator] 🎻 Iniciando orquestra de bots de música...');
+        console.log('[Orchestrator] 🎻 Iniciando Sistema Nativo (Discord-Player)...');
         
         // 1. Buscar bots no banco
         const result = await db.query('SELECT * FROM music_workers WHERE is_active = true');
         const workersData = result.rows;
 
         if (workersData.length === 0) {
-            console.log('[Orchestrator] ⚠️ Nenhum bot de música configurado no banco.');
+            console.log('[Orchestrator] ⚠️ Nenhum worker no banco.');
             return;
         }
 
-        // 2. Inicializar cada bot (Worker)
+        // 2. Inicializar cada bot
         for (const data of workersData) {
             try {
                 const token = decrypt({ content: data.token_enc, iv: data.iv });
-                if (!token) {
-                    console.error(`[Orchestrator] ❌ Falha ao decriptar token do worker ${data.name}`);
-                    continue;
-                }
+                if (!token) continue;
 
-                // Cria o Cliente do Bot Burro
+                // Cliente do Worker
                 const workerClient = new Client({
                     intents: [
                         GatewayIntentBits.Guilds,
-                        GatewayIntentBits.GuildVoiceStates // Necessário para tocar música
+                        GatewayIntentBits.GuildVoiceStates
                     ]
                 });
 
-                // Cria a instância do Shoukaku vinculada a ESTE worker
-                const shoukaku = new Shoukaku(new Connectors.DiscordJS(workerClient), Nodes, {
-                    moveOnDisconnect: false,
-                    resume: false,
-                    reconnectTries: 5,
-                    restTimeout: 10000
+                // --- A MÁGICA DO DISCORD PLAYER ---
+                // Criamos um Player dedicado para este bot específico
+                const player = new Player(workerClient, {
+                    skipFFmpeg: false, // Usa o ffmpeg local
+                    ytdlOptions: {
+                        quality: 'highestaudio',
+                        highWaterMark: 1 << 25
+                    }
                 });
 
-                shoukaku.on('error', (_, error) => console.error(`[Worker ${data.name}] ❌ Erro no Lavalink:`, error));
-                shoukaku.on('ready', (name) => console.log(`[Worker ${data.name}] 🎵 Conectado ao Node Lavalink: ${name}`));
+                // Carrega extratores (YouTube, Spotify, SoundCloud)
+                await player.extractors.loadMulti(DefaultExtractors);
 
-                // Login
+                // Logs de erro do player
+                player.events.on('error', (queue, error) => {
+                    console.log(`[Worker ${data.name}] Erro na fila: ${error.message}`);
+                });
+                player.events.on('playerError', (queue, error) => {
+                    console.log(`[Worker ${data.name}] Erro na conexão: ${error.message}`);
+                });
+
+                // Login do Worker
                 await workerClient.login(token);
-                
-                // Salva no mapa de workers
+
                 this.workers.set(workerClient.user.id, {
                     id: workerClient.user.id,
                     name: data.name,
                     client: workerClient,
-                    shoukaku: shoukaku,
+                    player: player, // Guardamos o player aqui
                     busy: false,
                     currentGuild: null
                 });
 
-                console.log(`[Orchestrator] ✅ Worker ${data.name} online e pronto.`);
+                console.log(`[Orchestrator] ✅ Worker ${data.name} pronto (Engine: FFmpeg)`);
 
             } catch (error) {
-                console.error(`[Orchestrator] ❌ Falha ao iniciar worker ${data.name}:`, error.message);
+                console.error(`[Orchestrator] Falha no worker ${data.name}:`, error.message);
             }
         }
     }
 
-    // Função para pegar um bot livre
     getFreeWorker(guildId) {
-        // Primeiro, verifica se já tem algum bot tocando NESTA guild (para reconectar)
+        // 1. Prioridade: Se já tem um worker nesta guild, usa ele
         for (const worker of this.workers.values()) {
             if (worker.currentGuild === guildId) return worker;
         }
 
-        // Se não, pega o primeiro que não esteja ocupado
+        // 2. Busca um livre (que não esteja tocando nada)
         for (const worker of this.workers.values()) {
-            // Verifica se o shoukaku tem players ativos
-            if (worker.shoukaku.players.size === 0) {
+            // Verifica se o player tem nodes ativos
+            if (!worker.player.nodes.has(guildId) && !worker.busy) {
                 return worker;
             }
         }
-        return null; // Todos ocupados
+        return null;
+    }
+    
+    // Libera o worker manualmente se precisar
+    releaseWorker(workerId) {
+        const worker = this.workers.get(workerId);
+        if (worker) {
+            worker.busy = false;
+            worker.currentGuild = null;
+        }
     }
 }
 
-// Exporta como Singleton (uma única instância para o bot todo)
 module.exports = new MusicOrchestrator();
