@@ -1,34 +1,40 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const db = require('../../database.js');
+const fetch = require('node-fetch'); // Certifique-se de ter node-fetch ou axios
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('setup-youtube')
-        .setDescription('Cole o JSON da extensão Cookie-Editor aqui')
-        .addStringOption(option => 
-            option.setName('json')
-                .setDescription('Cole o conteúdo que você exportou da extensão')
-                .setRequired(true))
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    data: new SlashCommandBuilder().setName('setup-youtube'), // (Apenas referência)
         
     async execute(interaction) {
         if (interaction.user.id !== process.env.OWNER_ID) {
-            return interaction.reply({ content: '❌ Apenas o dono pode fazer isso.', ephemeral: true });
+            return interaction.reply({ content: '❌ Apenas o dono.', ephemeral: true });
         }
 
-        const rawJson = interaction.options.getString('json');
-        let finalCookie = '';
+        await interaction.deferReply({ ephemeral: true });
 
+        const attachment = interaction.options.getAttachment('arquivo');
+        
         try {
-            const cookies = JSON.parse(rawJson);
-            if (Array.isArray(cookies)) {
-                // Pega apenas os cookies essenciais para o YouTube não reclamar
-                const essentialCookies = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-                finalCookie = essentialCookies;
-            } else {
-                finalCookie = rawJson;
+            // Baixa o conteúdo do arquivo enviado
+            const response = await fetch(attachment.url);
+            const textData = await response.text();
+            
+            let finalCookie = '';
+
+            try {
+                // Tenta processar como JSON (Formato da Extensão)
+                const cookies = JSON.parse(textData);
+                if (Array.isArray(cookies)) {
+                    finalCookie = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+                } else {
+                    finalCookie = textData.trim(); // Pode ser só texto
+                }
+            } catch (e) {
+                // Se não for JSON, assume que é texto puro
+                finalCookie = textData.trim();
             }
 
+            // Salva no Banco
             await db.query(`
                 INSERT INTO bot_status (status_key, maintenance_message) 
                 VALUES ('youtube_config', $1) 
@@ -38,14 +44,13 @@ module.exports = {
 
             process.env.YOUTUBE_COOKIES = finalCookie;
 
-            await interaction.reply({ 
-                content: '✅ **YouTube Configurado!** Tente usar `/tocar` agora.', 
-                ephemeral: true 
+            await interaction.editReply({ 
+                content: '✅ **Arquivo processado com sucesso!**\nCookie do YouTube atualizado. Tente usar `/tocar`.' 
             });
 
         } catch (error) {
             console.error(error);
-            await interaction.reply({ content: '❌ Erro ao ler o código. Copie TUDO da extensão.', ephemeral: true });
+            await interaction.editReply({ content: '❌ Erro ao ler o arquivo.' });
         }
     }
 };
