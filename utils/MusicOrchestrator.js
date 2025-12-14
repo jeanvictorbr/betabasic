@@ -1,6 +1,5 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const { Player } = require('discord-player');
-const { SpotifyExtractor, SoundCloudExtractor } = require('@discord-player/extractor'); // Importa manualmente
 const db = require('../database.js');
 const { decrypt } = require('./encryption.js');
 
@@ -10,7 +9,7 @@ class MusicOrchestrator {
     }
 
     async start() {
-        console.log('[Orchestrator] 🎻 Iniciando Sistema "SoundCloud Bridge" (Sem YouTube)...');
+        console.log('[Orchestrator] 🎻 Iniciando Sistema com Busca Externa (youtube-sr)...');
         
         const result = await db.query('SELECT * FROM music_workers WHERE is_active = true');
         const workersData = result.rows;
@@ -30,28 +29,17 @@ class MusicOrchestrator {
                 });
 
                 const player = new Player(workerClient, {
-                    skipFFmpeg: false, // Usa ffmpeg-static
+                    skipFFmpeg: false,
                     ytdlOptions: { quality: 'highestaudio', highWaterMark: 1 << 25 }
                 });
 
-                // --- CONFIGURAÇÃO DE EXTRATORES ---
+                // Carrega padrão (YouTube/Spotify) para saber tocar LINKS
                 try {
-                    // 1. Registra o SoundCloud (nossa fonte de áudio principal)
-                    await player.extractors.register(SoundCloudExtractor, {});
-
-                    // 2. Registra o Spotify e manda ele usar o SoundCloud como ponte
-                    // Isso evita o erro de "Could not load youtube library"
-                    await player.extractors.register(SpotifyExtractor, {
-                        bridgeProvider: 'soundcloud' 
-                    });
-
-                    // NÃO carregamos o loadDefault() para evitar o YouTubeExtractor
-                    
-                    console.log(`[Worker ${data.name}] 📦 Modo Spotify -> SoundCloud Ativado.`);
-                } catch (extError) {
-                    console.error(`[Worker ${data.name}] ⚠️ Erro extratores: ${extError.message}`);
+                    await player.extractors.loadDefault();
+                    console.log(`[Worker ${data.name}] 📦 Extratores prontos.`);
+                } catch (e) {
+                    console.error(`[Worker ${data.name}] ⚠️ Erro loadDefault (Ignorável): ${e.message}`);
                 }
-                // ----------------------------------
 
                 player.events.on('error', (queue, error) => console.log(`[${data.name}] Erro Fila: ${error.message}`));
                 player.events.on('playerError', (queue, error) => console.log(`[${data.name}] Erro Player: ${error.message}`));
@@ -83,7 +71,6 @@ class MusicOrchestrator {
                 return worker; 
             }
         }
-
         for (const worker of this.workers.values()) {
             if (!worker.busy && worker.player.nodes.cache.size === 0) {
                 return worker;
