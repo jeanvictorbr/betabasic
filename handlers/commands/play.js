@@ -1,6 +1,6 @@
 const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js');
 const MusicOrchestrator = require('../../utils/MusicOrchestrator.js');
-const YouTube = require("youtube-sr").default; // Nossa arma secreta contra bloqueios
+const { QueryType } = require('discord-player');
 
 module.exports = async (interaction) => {
     const memberChannel = interaction.member.voice.channel;
@@ -20,79 +20,77 @@ module.exports = async (interaction) => {
         worker.currentGuild = interaction.guild.id; 
         worker.busy = true;
 
-        let urlToPlay = query;
-        let searchResults = [];
-
-        // SE FOR TEXTO (NÃO É LINK), USA O YOUTUBE-SR PARA BUSCAR
-        if (!query.startsWith('http')) {
-            console.log(`[Play] Buscando externamente: "${query}"`);
-            try {
-                // Busca 10 vídeos usando a lib externa resistente a bloqueios
-                const videos = await YouTube.search(query, { limit: 10, type: 'video' });
-                
-                if (!videos || videos.length === 0) {
-                    throw new Error("Nenhum vídeo encontrado");
-                }
-
-                searchResults = videos;
-            } catch (err) {
-                console.error("[Play] Erro na busca externa:", err.message);
-                MusicOrchestrator.releaseWorker(worker.id);
-                return interaction.editReply('❌ Não consegui encontrar essa música.');
-            }
-        } else {
-            // Se já for link, trata como resultado único
-            urlToPlay = query;
+        // Se o usuário mandar link do YouTube, avisamos que não suportamos (para evitar crashes)
+        if (query.includes('youtube.com') || query.includes('youtu.be')) {
+            MusicOrchestrator.releaseWorker(worker.id);
+            return interaction.editReply('❌ **YouTube indisponível** devido a bloqueios de região.\n✅ Por favor, pesquise o **Nome da Música** (buscarei no SoundCloud) ou use link do SoundCloud.');
         }
 
-        // --- SE FOR LINK DIRETO (TOCA NA HORA) ---
-        if (searchResults.length === 0) {
-            const { track } = await worker.player.play(memberChannel, urlToPlay, {
-                nodeOptions: { metadata: interaction, leaveOnEmpty: true, leaveOnEnd: true, selfDeaf: true }
+        // --- BUSCA NO SOUNDCLOUD ---
+        // Se for link direto (http), usa AUTO. Se for texto, força SOUNDCLOUD_SEARCH.
+        const searchEngine = query.startsWith('http') ? QueryType.AUTO : QueryType.SOUNDCLOUD_SEARCH;
+
+        const searchResult = await worker.player.search(query, {
+            requestedBy: interaction.user,
+            searchEngine: searchEngine
+        });
+
+        if (!searchResult || !searchResult.tracks.length) {
+            MusicOrchestrator.releaseWorker(worker.id);
+            return interaction.editReply('❌ Nenhuma música encontrada no SoundCloud.');
+        }
+
+        // --- TOCAR DIRETO (Link ou Resultado Único) ---
+        if (searchResult.tracks.length === 1 || query.startsWith('http')) {
+            const { track } = await worker.player.play(memberChannel, searchResult, {
+                nodeOptions: {
+                    metadata: interaction,
+                    leaveOnEmpty: true,
+                    leaveOnEnd: true,
+                    selfDeaf: true
+                }
             });
 
             const embed = new EmbedBuilder()
-                .setColor('#FF0000')
+                .setColor('#FF5500') // Laranja SoundCloud
                 .setAuthor({ name: `Tocando via ${worker.name}`, iconURL: worker.client.user.displayAvatarURL() })
-                .setDescription(`🎵 **[${track.title}](${track.url})**`)
-                .addFields({ name: 'Duração', value: track.duration, inline: true });
+                .setDescription(`🎵 **[${track.title}](${track.url})**\n*Artista: ${track.author}*`)
+                .setFooter({ text: 'Fonte: SoundCloud' });
 
             await interaction.editReply({ embeds: [embed] });
             setupQueueEvents(worker, interaction.guild.id);
             return;
         }
 
-        // --- SE FOR BUSCA (MOSTRA MENU) ---
-        const options = searchResults.map((v, i) => ({
-            label: `${i + 1}. ${v.title}`.slice(0, 100),
-            description: v.channel ? v.channel.name.slice(0, 100) : 'YouTube',
-            value: v.url, // O value é o LINK direto do vídeo
-            emoji: '🔴'
+        // --- MENU DE SELEÇÃO (Para Pesquisa por Nome) ---
+        const tracks = searchResult.tracks.slice(0, 10);
+        
+        const options = tracks.map((track, i) => ({
+            label: `${i + 1}. ${track.title}`.slice(0, 100),
+            description: track.author.slice(0, 100),
+            value: track.url, 
+            emoji: '🟠' // Emoji SoundCloud
         }));
 
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId(`play_select_${worker.id}`)
-            .setPlaceholder('Selecione o vídeo...')
+            .setPlaceholder('Selecione a música...')
             .addOptions(options);
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
         const embed = new EmbedBuilder()
-            .setColor('#FF0000')
-            .setTitle(`🔎 Resultados para "${query}"`)
-            .setDescription(`Encontrei **${searchResults.length}** vídeos.\nSelecione abaixo para tocar.`)
-            .setFooter({ text: `Via ${worker.name} • YouTube` });
+            .setColor('#FF5500')
+            .setTitle('🔎 Resultados SoundCloud')
+            .setDescription(`Encontrei **${tracks.length}** resultados para \`${query}\`.`)
+            .setFooter({ text: `Worker: ${worker.name}` });
 
         await interaction.editReply({ embeds: [embed], components: [row] });
 
     } catch (error) {
-        console.error(`[Play] Erro Player:`, error);
+        console.error(`[Play] Erro:`, error);
         MusicOrchestrator.releaseWorker(worker.id);
-        
-        if (error.message.includes('Could not load youtube library')) {
-             return interaction.editReply('❌ Erro de biblioteca interna. Tente usar um link do Spotify.');
-        }
-        await interaction.editReply('❌ Erro ao tocar. Tente um link direto.');
+        await interaction.editReply('❌ Erro ao buscar. Tente pesquisar pelo nome exato.');
     }
 };
 

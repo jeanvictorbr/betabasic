@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const { Player } = require('discord-player');
+const { SoundCloudExtractor } = require('@discord-player/extractor');
 const db = require('../database.js');
 const { decrypt } = require('./encryption.js');
 
@@ -9,7 +10,7 @@ class MusicOrchestrator {
     }
 
     async start() {
-        console.log('[Orchestrator] 🎻 Iniciando Sistema com Busca Externa (youtube-sr)...');
+        console.log('[Orchestrator] 🎻 Iniciando Sistema Nativo (SoundCloud ONLY)...');
         
         const result = await db.query('SELECT * FROM music_workers WHERE is_active = true');
         const workersData = result.rows;
@@ -33,13 +34,17 @@ class MusicOrchestrator {
                     ytdlOptions: { quality: 'highestaudio', highWaterMark: 1 << 25 }
                 });
 
-                // Carrega padrão (YouTube/Spotify) para saber tocar LINKS
+                // --- CARREGAMENTO LIMPO ---
                 try {
-                    await player.extractors.loadDefault();
-                    console.log(`[Worker ${data.name}] 📦 Extratores prontos.`);
-                } catch (e) {
-                    console.error(`[Worker ${data.name}] ⚠️ Erro loadDefault (Ignorável): ${e.message}`);
+                    // Registra APENAS o SoundCloud.
+                    // Isso evita qualquer erro relacionado a YouTube/Spotify bloqueados.
+                    await player.extractors.register(SoundCloudExtractor, {});
+                    
+                    console.log(`[Worker ${data.name}] 📦 Extrator SoundCloud: ATIVO`);
+                } catch (extError) {
+                    console.error(`[Worker ${data.name}] ⚠️ Erro extrator: ${extError.message}`);
                 }
+                // --------------------------
 
                 player.events.on('error', (queue, error) => console.log(`[${data.name}] Erro Fila: ${error.message}`));
                 player.events.on('playerError', (queue, error) => console.log(`[${data.name}] Erro Player: ${error.message}`));
