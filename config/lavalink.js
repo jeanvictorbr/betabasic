@@ -1,8 +1,21 @@
+// config/lavalink.js
 module.exports = [
     {
-        name: 'Node 1',
-        url: 'localhost:2333', // Mude para o IP:PORTA do seu Lavalink
-        auth: 'youshallnotpass', // Mude para a senha do seu Lavalink
+        name: 'AjieBlogs Public (SSL)',
+        url: 'lava-v4.ajieblogs.eu.org:443',
+        auth: 'https://ajieblogs.eu.org',
+        secure: true
+    },
+    {
+        name: 'Komo Public',
+        url: 'lava.komo.id:80', // Porta 80 é comum para não-SSL
+        auth: 'komodroid',
+        secure: false
+    },
+    {
+        name: 'Public Lavalink Vol.1',
+        url: 'lavalink.volunteers.gq:80',
+        auth: 'volunteers',
         secure: false
     }
 ];
