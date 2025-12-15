@@ -9,7 +9,7 @@ module.exports = {
 
         const result = await db.query(`
             SELECT * FROM ponto_sessions 
-            WHERE user_id = $1 AND guild_id = $2 AND status = 'OPEN'
+            WHERE user_id = $1 AND guild_id = $2 AND (status = 'OPEN' OR status IS NULL)
         `, [userId, guildId]);
 
         if (result.rows.length === 0) {
@@ -17,49 +17,49 @@ module.exports = {
         }
 
         const session = result.rows[0];
-        const now = Date.now();
+        const now = new Date(); // Objeto Date para o banco
+        const nowMs = now.getTime(); // Ms para calculo
 
-        // Se estava pausado ao encerrar, precisamos computar a pausa final até agora
-        let finalTotalPause = parseInt(session.total_pause_duration || 0);
-        if (session.is_paused) {
-            const currentPauseDuration = now - parseInt(session.last_pause_time);
+        // Calcula pausa final se estiver pausado
+        let finalTotalPause = parseInt(session.total_paused_ms || 0);
+        
+        if (session.is_paused && session.last_pause_time) {
+            const lastPauseMs = new Date(session.last_pause_time).getTime();
+            const currentPauseDuration = nowMs - lastPauseMs;
             finalTotalPause += currentPauseDuration;
         }
 
-        // Fecha a sessão
+        // Fecha a sessão usando session_id
         await db.query(`
             UPDATE ponto_sessions 
-            SET status = 'CLOSED', end_time = $1, is_paused = FALSE, total_pause_duration = $2
-            WHERE id = $3
-        `, [now, finalTotalPause, session.id]);
+            SET status = 'CLOSED', end_time = $1, is_paused = FALSE, total_paused_ms = $2
+            WHERE session_id = $3
+        `, [now, finalTotalPause, session.session_id]);
 
-        // Pega os dados finais para cálculo
+        // Simula objeto final para cálculo visual
         session.end_time = now;
         session.status = 'CLOSED';
-        session.total_pause_duration = finalTotalPause;
+        session.total_paused_ms = finalTotalPause;
+        session.is_paused = false; // Força false para o cálculo considerar fechado
         
         const timeData = calculateSessionTime(session);
 
-        // UI de Relatório Final (Resposta v2 type 17 não suporta embed update em reply normal, então fazemos editReply ou novo update)
-        // Aqui vamos atualizar o painel para mostrar que fechou
-        
         const finalEmbed = {
             title: "✅ Expediente Finalizado",
-            color: 0xFF0000, // Vermelho
+            color: 0xFF0000,
             fields: [
                 { name: "Usuário", value: `<@${userId}>`, inline: true },
                 { name: "Tempo Total", value: `\`${timeData.formatted}\``, inline: true },
-                { name: "Fim", value: `<t:${Math.floor(now / 1000)}:f>`, inline: false }
+                { name: "Fim", value: `<t:${Math.floor(nowMs / 1000)}:f>`, inline: false }
             ],
             footer: { text: "Registro salvo com sucesso." }
         };
 
-        // Atualiza a mensagem original do painel para "Encerrado" e remove botões
         await interaction.update({
             embeds: [finalEmbed],
-            components: [] // Remove botões
+            components: []
         });
-
-        // Opcional: Enviar log para canal de logs se configurado (pode ser implementado depois)
+        
+        // (Opcional) Aqui você pode inserir na tabela de histórico ou logs
     }
 };

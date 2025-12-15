@@ -9,7 +9,7 @@ module.exports = {
 
         const result = await db.query(`
             SELECT * FROM ponto_sessions 
-            WHERE user_id = $1 AND guild_id = $2 AND status = 'OPEN'
+            WHERE user_id = $1 AND guild_id = $2 AND (status = 'OPEN' OR status IS NULL)
         `, [userId, guildId]);
 
         if (result.rows.length === 0) {
@@ -22,22 +22,23 @@ module.exports = {
             return interaction.reply({ content: "⚠️ Sua sessão não está pausada.", flags: 1 << 6 });
         }
 
-        // LÓGICA DE RETOMADA:
-        // 1. Calculamos quanto tempo ficou parado (Agora - last_pause_time)
-        // 2. Adicionamos isso ao acumulador total_pause_duration
-        // 3. Tiramos o flag de is_paused
-        
+        // Lógica de cálculo da pausa
         const now = Date.now();
-        const pauseDuration = now - parseInt(session.last_pause_time);
-        const newTotalPause = parseInt(session.total_pause_duration || 0) + pauseDuration;
+        // Converte last_pause_time (Date) para ms
+        const lastPauseMs = session.last_pause_time ? new Date(session.last_pause_time).getTime() : now;
+        
+        const pauseDuration = now - lastPauseMs;
+        const currentTotal = parseInt(session.total_paused_ms || 0);
+        const newTotalPause = currentTotal + pauseDuration;
 
+        // CORREÇÃO: Usando 'session_id' e limpando last_pause_time
         await db.query(`
             UPDATE ponto_sessions 
-            SET is_paused = FALSE, total_pause_duration = $1, last_pause_time = 0
-            WHERE id = $2
-        `, [newTotalPause, session.id]);
+            SET is_paused = FALSE, total_paused_ms = $1, last_pause_time = NULL
+            WHERE session_id = $2
+        `, [newTotalPause, session.session_id]);
 
-        const updatedSession = await db.query('SELECT * FROM ponto_sessions WHERE id = $1', [session.id]);
+        const updatedSession = await db.query('SELECT * FROM ponto_sessions WHERE session_id = $1', [session.session_id]);
         
         const ui = pontoDashboard(updatedSession.rows[0], interaction.member);
         await interaction.update(ui);

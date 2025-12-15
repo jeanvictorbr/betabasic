@@ -1,28 +1,46 @@
 /**
- * Calcula o tempo líquido de uma sessão, descontando as pausas.
+ * Calcula o tempo líquido de uma sessão, compatível com TIMESTAMPTZ e BIGINT.
  * @param {Object} session Objeto da sessão vindo do DB
- * @returns {Object} { durationMs, hours, minutes, seconds }
+ * @returns {Object} { durationMs, hours, minutes, seconds, formatted }
  */
 function calculateSessionTime(session) {
     const now = Date.now();
     let totalElapsed = 0;
 
-    if (session.status === 'CLOSED' && session.end_time) {
-        // Se já fechou, usa o end_time
-        totalElapsed = parseInt(session.end_time) - parseInt(session.start_time);
+    // Função auxiliar para converter qualquer entrada de data em Timestamp (ms)
+    const parseTime = (val) => {
+        if (!val) return 0;
+        if (val instanceof Date) return val.getTime(); // Se for objeto Date do JS
+        return parseInt(val); // Se for string/number (timestamp unix)
+    };
+
+    const startTimeMs = parseTime(session.start_time);
+    const lastPauseTimeMs = parseTime(session.last_pause_time);
+    const endTimeMs = parseTime(session.end_time);
+    
+    // Converte total_paused_ms (que vem como string do banco se for BIGINT)
+    const totalPausedVal = parseInt(session.total_paused_ms || session.total_pause_duration || 0);
+
+    if (session.status === 'CLOSED' && endTimeMs > 0) {
+        // Se já fechou
+        totalElapsed = endTimeMs - startTimeMs;
     } else {
-        // Se está aberto ou pausado
-        // Se estiver pausado agora, o tempo parou de contar no last_pause_time
-        // Se estiver trabalhando, o tempo é Agora
-        const referenceTime = session.is_paused ? parseInt(session.last_pause_time) : now;
-        totalElapsed = referenceTime - parseInt(session.start_time);
+        // Se está aberto
+        const referenceTime = session.is_paused ? lastPauseTimeMs : now;
+        
+        // Proteção contra inconsistências de data
+        if (referenceTime < startTimeMs) {
+            totalElapsed = 0;
+        } else {
+            totalElapsed = referenceTime - startTimeMs;
+        }
     }
 
-    // Subtrai todo o tempo que ficou pausado no passado
-    const liquidTime = totalElapsed - (parseInt(session.total_pause_duration) || 0);
+    // Tempo Líquido = Tempo Decorrido - Tempo Pausado
+    const liquidTime = totalElapsed - totalPausedVal;
 
-    // Evitar negativos por dessincronia de relógio
-    const finalTime = Math.max(0, liquidTime);
+    // Evitar negativos (NaN ou < 0)
+    const finalTime = Math.max(0, isNaN(liquidTime) ? 0 : liquidTime);
 
     const seconds = Math.floor((finalTime / 1000) % 60);
     const minutes = Math.floor((finalTime / (1000 * 60)) % 60);

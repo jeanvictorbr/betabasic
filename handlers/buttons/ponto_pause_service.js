@@ -7,10 +7,10 @@ module.exports = {
         const userId = interaction.user.id;
         const guildId = interaction.guild.id;
 
-        // Buscar sessão aberta
+        // CORREÇÃO: Usando 'session_id' na query
         const result = await db.query(`
             SELECT * FROM ponto_sessions 
-            WHERE user_id = $1 AND guild_id = $2 AND status = 'OPEN'
+            WHERE user_id = $1 AND guild_id = $2 AND (status = 'OPEN' OR status IS NULL)
         `, [userId, guildId]);
 
         if (result.rows.length === 0) {
@@ -23,18 +23,18 @@ module.exports = {
             return interaction.reply({ content: "⚠️ Sua sessão já está pausada.", flags: 1 << 6 });
         }
 
-        // LÓGICA DE PAUSA: Apenas marcamos que pausou AGORA.
-        // O tempo decorrido até agora será calculado dinamicamente no Utils.
-        const now = Date.now();
+        // Para TIMESTAMPTZ, usamos o objeto Date ou string ISO
+        const now = new Date(); 
 
+        // CORREÇÃO: Usando 'session_id' no WHERE
         await db.query(`
             UPDATE ponto_sessions 
             SET is_paused = TRUE, last_pause_time = $1
-            WHERE id = $2
-        `, [now, session.id]);
+            WHERE session_id = $2
+        `, [now, session.session_id]);
 
-        // Recupera sessão atualizada para mostrar na UI
-        const updatedSession = await db.query('SELECT * FROM ponto_sessions WHERE id = $1', [session.id]);
+        // Recupera atualizado para a UI
+        const updatedSession = await db.query('SELECT * FROM ponto_sessions WHERE session_id = $1', [session.session_id]);
         
         const ui = pontoDashboard(updatedSession.rows[0], interaction.member);
         await interaction.update(ui);
