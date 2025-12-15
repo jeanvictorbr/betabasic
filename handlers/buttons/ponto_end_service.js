@@ -1,5 +1,6 @@
 const db = require('../../database.js');
 const { calculateSessionTime } = require('../../utils/pontoUtils.js');
+const { updatePontoLog } = require('../../utils/pontoLogManager.js');
 
 module.exports = {
     customId: 'ponto_end_service',
@@ -7,8 +8,7 @@ module.exports = {
         const userId = interaction.user.id;
         const guildId = interaction.guild.id;
 
-        // 1. Busca MAIS PERMISSIVA para encontrar a sessão do usuário
-        // Ordena por session_id DESC para pegar a última criada, caso existam fantasmas
+        // 1. Busca Robusta (aceita NULL ou OPEN)
         const result = await db.query(`
             SELECT * FROM ponto_sessions 
             WHERE user_id = $1 
@@ -19,9 +19,8 @@ module.exports = {
         `, [userId, guildId]);
 
         if (result.rows.length === 0) {
-            // Limpa a mensagem bugada se não achar nada no banco
             return interaction.update({ 
-                content: "❌ Nenhuma sessão ativa encontrada no banco de dados.", 
+                content: "❌ Sessão não encontrada ou já finalizada.", 
                 embeds: [], 
                 components: [] 
             });
@@ -40,26 +39,24 @@ module.exports = {
             }
         }
 
-        // 2. ATUALIZAÇÃO BLINDADA
-        try {
-            await db.query(`
-                UPDATE ponto_sessions 
-                SET status = 'CLOSED', 
-                    end_time = $1, 
-                    is_paused = FALSE, 
-                    total_paused_ms = $2
-                WHERE session_id = $3
-            `, [now, finalTotalPause, session.session_id]);
-        } catch (err) {
-            console.error(err);
-            return interaction.reply({ content: "Erro ao salvar no DB.", flags: 1 << 6 });
-        }
+        // 2. Encerramento no DB
+        await db.query(`
+            UPDATE ponto_sessions 
+            SET status = 'CLOSED', 
+                end_time = $1, 
+                is_paused = FALSE, 
+                total_paused_ms = $2
+            WHERE session_id = $3
+        `, [now, finalTotalPause, session.session_id]);
 
-        // 3. Atualiza objeto local para exibição
+        // 3. Atualiza objeto local para exibição correta
         session.end_time = now;
         session.status = 'CLOSED';
         session.total_paused_ms = finalTotalPause;
         session.is_paused = false;
+
+        // --- ATUALIZA LOG (FINALIZA EM VERMELHO) ---
+        updatePontoLog(interaction.client, session, interaction.user);
 
         const timeData = calculateSessionTime(session);
 

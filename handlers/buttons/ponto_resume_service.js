@@ -1,5 +1,6 @@
 const db = require('../../database.js');
 const pontoDashboard = require('../../ui/pontoDashboardPessoalV2.js');
+const { updatePontoLog } = require('../../utils/pontoLogManager.js');
 
 module.exports = {
     customId: 'ponto_resume_service',
@@ -24,23 +25,30 @@ module.exports = {
 
         // Lógica de cálculo da pausa
         const now = Date.now();
-        // Converte last_pause_time (Date) para ms
         const lastPauseMs = session.last_pause_time ? new Date(session.last_pause_time).getTime() : now;
         
-        const pauseDuration = now - lastPauseMs;
+        // Proteção contra NaN
+        const safeLastPause = isNaN(lastPauseMs) ? now : lastPauseMs;
+        const pauseDuration = now - safeLastPause;
+        
         const currentTotal = parseInt(session.total_paused_ms || 0);
         const newTotalPause = currentTotal + pauseDuration;
 
-        // CORREÇÃO: Usando 'session_id' e limpando last_pause_time
+        // Atualiza DB
         await db.query(`
             UPDATE ponto_sessions 
             SET is_paused = FALSE, total_paused_ms = $1, last_pause_time = NULL
             WHERE session_id = $2
         `, [newTotalPause, session.session_id]);
 
-        const updatedSession = await db.query('SELECT * FROM ponto_sessions WHERE session_id = $1', [session.session_id]);
-        
-        const ui = pontoDashboard(updatedSession.rows[0], interaction.member);
+        const updatedResult = await db.query('SELECT * FROM ponto_sessions WHERE session_id = $1', [session.session_id]);
+        const updatedSession = updatedResult.rows[0];
+
+        // Atualiza Log (Live Audit)
+        updatePontoLog(interaction.client, updatedSession, interaction.user);
+
+        // Atualiza Painel Pessoal
+        const ui = pontoDashboard(updatedSession, interaction.member);
         await interaction.update(ui);
     }
 };
