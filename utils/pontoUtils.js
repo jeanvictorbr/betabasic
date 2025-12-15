@@ -1,64 +1,71 @@
 /**
  * utils/pontoUtils.js
- * Utilitário central para cálculos de tempo do Ponto.
+ * Versão Blindada contra NaN
  */
 
-// Função auxiliar para garantir timestamp em milissegundos
 function parseToMs(value) {
     if (!value) return 0;
-    if (value instanceof Date) return value.getTime();
-    if (typeof value === 'string') return new Date(value).getTime();
-    return Number(value); // Já é numero (timestamp)
+    
+    let ms;
+    if (value instanceof Date) {
+        ms = value.getTime();
+    } else if (typeof value === 'string') {
+        // Tenta converter string ISO
+        const d = new Date(value);
+        ms = d.getTime();
+    } else if (typeof value === 'number') {
+        ms = value;
+    }
+
+    // Se a conversão falhou (NaN), retorna 0 ou timestamp atual como fallback seguro
+    if (!ms || isNaN(ms)) return 0; 
+    return ms;
 }
 
 function calculateSessionTime(session) {
     const now = Date.now();
     
-    // Converte tudo para Milissegundos
     const startTimeMs = parseToMs(session.start_time);
     const lastPauseMs = parseToMs(session.last_pause_time);
     const endTimeMs = parseToMs(session.end_time);
+    
+    // Garante que pausas sejam números (converte de string do banco se necessário)
     const totalPausedMs = parseInt(session.total_paused_ms || session.total_pause_duration || 0);
 
     let totalElapsed = 0;
 
-    if (session.status === 'CLOSED' && endTimeMs > 0) {
-        // Sessão fechada: Fim - Início
-        totalElapsed = endTimeMs - startTimeMs;
-    } else {
-        // Sessão aberta
-        if (session.is_paused) {
-            // Se está pausado, o tempo parou de contar no momento da pausa (lastPauseMs)
-            // Se lastPauseMs for inválido (0), usa o Agora como fallback para não quebrar
-            const stopPoint = lastPauseMs > 0 ? lastPauseMs : now;
-            totalElapsed = stopPoint - startTimeMs;
+    // Se start_time for inválido (0), não tem como calcular
+    if (startTimeMs > 0) {
+        if (session.status === 'CLOSED' && endTimeMs > 0) {
+            totalElapsed = endTimeMs - startTimeMs;
         } else {
-            // Se está rodando, é Agora - Início
-            totalElapsed = now - startTimeMs;
+            // Aberto
+            if (session.is_paused) {
+                // Se lastPauseMs for inválido, assume Agora para não travar
+                const stopPoint = lastPauseMs > 0 ? lastPauseMs : now;
+                totalElapsed = stopPoint - startTimeMs;
+            } else {
+                totalElapsed = now - startTimeMs;
+            }
         }
     }
 
-    // Subtrai o total de pausas acumuladas
-    const liquidTime = totalElapsed - totalPausedMs;
+    const liquidTime = Math.max(0, totalElapsed - totalPausedMs);
 
-    // Evita números negativos ou NaN
-    const finalTime = Math.max(0, isNaN(liquidTime) ? 0 : liquidTime);
+    const seconds = Math.floor((liquidTime / 1000) % 60);
+    const minutes = Math.floor((liquidTime / (1000 * 60)) % 60);
+    const hours = Math.floor((liquidTime / (1000 * 60 * 60)));
 
-    const seconds = Math.floor((finalTime / 1000) % 60);
-    const minutes = Math.floor((finalTime / (1000 * 60)) % 60);
-    const hours = Math.floor((finalTime / (1000 * 60 * 60)));
-
-    // Formata HH:MM:SS
-    const pad = (n) => n.toString().padStart(2, '0');
-    const formatted = `${hours}h ${minutes}m ${seconds}s`; // Ex: 1h 05m 09s
+    // Fallback para exibição do Discord: Se startTimeMs for 0, usa o now para não mostrar NaN
+    const discordTimestamp = startTimeMs > 0 ? Math.floor(startTimeMs / 1000) : Math.floor(now / 1000);
 
     return {
-        durationMs: finalTime,
+        durationMs: liquidTime,
         hours,
         minutes,
         seconds,
-        formatted,
-        startTimestamp: Math.floor(startTimeMs / 1000) // Retorna segundos para o Discord <t:X:f>
+        formatted: `${hours}h ${minutes}m ${seconds}s`,
+        startTimestamp: discordTimestamp // Agora garantido ser um número válido
     };
 }
 
