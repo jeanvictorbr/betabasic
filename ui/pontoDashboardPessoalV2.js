@@ -1,4 +1,4 @@
-const { calculateSessionTime } = require('../../utils/pontoUtils.js');
+const { calculateSessionTime } = require('../utils/pontoUtils.js'); // <--- CORRIGIDO AQUI
 
 module.exports = (session, member) => {
     const timeData = calculateSessionTime(session);
@@ -21,7 +21,7 @@ module.exports = (session, member) => {
             components: [
                 {
                     type: 2, // Button
-                    style: session.is_paused ? 3 : 2, // Verde se pausado (pra chamar atenção pra voltar), Cinza se trabalhando
+                    style: session.is_paused ? 3 : 2, // Verde se pausado, Cinza se trabalhando
                     label: session.is_paused ? "Retomar Serviço" : "Pausar Serviço",
                     custom_id: session.is_paused ? "ponto_resume_service" : "ponto_pause_service",
                     emoji: session.is_paused ? { name: "▶️" } : { name: "⏸️" }
