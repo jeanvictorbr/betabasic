@@ -1,34 +1,45 @@
-// handlers/buttons/ponto_resume_service.js
 const db = require('../../database.js');
-const generatePontoDashboard = require('../../ui/pontoDashboardPessoal.js');
-const generatePontoDashboardV2 = require('../../ui/pontoDashboardPessoalV2.js');
-const { scheduleAfkCheck } = require('../../utils/afkCheck.js');
-
-const V2_FLAG = 1 << 15; // Flag adicionada para corrigir o erro
+const pontoDashboard = require('../../ui/pontoDashboardPessoalV2.js');
 
 module.exports = {
     customId: 'ponto_resume_service',
     async execute(interaction) {
-        await interaction.deferUpdate();
+        const userId = interaction.user.id;
+        const guildId = interaction.guild.id;
 
-        const session = (await db.query('SELECT * FROM ponto_sessions WHERE user_id = $1 AND guild_id = $2', [interaction.user.id, interaction.guild.id])).rows[0];
-        if (!session || !session.is_paused) return;
+        const result = await db.query(`
+            SELECT * FROM ponto_sessions 
+            WHERE user_id = $1 AND guild_id = $2 AND status = 'OPEN'
+        `, [userId, guildId]);
 
-        const lastPauseTime = new Date(session.last_pause_time);
-        const pauseDurationMs = Date.now() - lastPauseTime.getTime();
-
-        await db.query('UPDATE ponto_sessions SET is_paused = false, last_pause_time = NULL, total_paused_ms = total_paused_ms + $1 WHERE session_id = $2', [pauseDurationMs, session.session_id]);
-
-        const settings = (await db.query('SELECT * FROM guild_settings WHERE guild_id = $1', [interaction.guild.id])).rows[0];
-        if (settings.ponto_afk_check_enabled) {
-            scheduleAfkCheck(interaction.client, interaction.guild.id, interaction.user.id, settings.ponto_afk_check_interval_minutes);
+        if (result.rows.length === 0) {
+            return interaction.reply({ content: "❌ Nenhuma sessão ativa encontrada.", flags: 1 << 6 });
         }
+
+        const session = result.rows[0];
+
+        if (!session.is_paused) {
+            return interaction.reply({ content: "⚠️ Sua sessão não está pausada.", flags: 1 << 6 });
+        }
+
+        // LÓGICA DE RETOMADA:
+        // 1. Calculamos quanto tempo ficou parado (Agora - last_pause_time)
+        // 2. Adicionamos isso ao acumulador total_pause_duration
+        // 3. Tiramos o flag de is_paused
         
-        const updatedSession = (await db.query('SELECT * FROM ponto_sessions WHERE session_id = $1', [session.session_id])).rows[0];
-        const dashboardPayload = settings.ponto_dashboard_v2_enabled 
-            ? { components: generatePontoDashboardV2(interaction, settings, updatedSession), flags: V2_FLAG }
-            : generatePontoDashboard(interaction, updatedSession);
-            
-        await interaction.editReply(dashboardPayload);
+        const now = Date.now();
+        const pauseDuration = now - parseInt(session.last_pause_time);
+        const newTotalPause = parseInt(session.total_pause_duration || 0) + pauseDuration;
+
+        await db.query(`
+            UPDATE ponto_sessions 
+            SET is_paused = FALSE, total_pause_duration = $1, last_pause_time = 0
+            WHERE id = $2
+        `, [newTotalPause, session.id]);
+
+        const updatedSession = await db.query('SELECT * FROM ponto_sessions WHERE id = $1', [session.id]);
+        
+        const ui = pontoDashboard(updatedSession.rows[0], interaction.member);
+        await interaction.update(ui);
     }
 };

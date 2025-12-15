@@ -1,30 +1,42 @@
-// handlers/buttons/ponto_pause_service.js
 const db = require('../../database.js');
-const generatePontoDashboard = require('../../ui/pontoDashboardPessoal.js');
-const generatePontoDashboardV2 = require('../../ui/pontoDashboardPessoalV2.js');
-
-const V2_FLAG = 1 << 15; // Flag adicionada para corrigir o erro
+const pontoDashboard = require('../../ui/pontoDashboardPessoalV2.js');
 
 module.exports = {
     customId: 'ponto_pause_service',
     async execute(interaction) {
-        if (interaction.client.afkCheckTimers.has(interaction.user.id)) { clearTimeout(interaction.client.afkCheckTimers.get(interaction.user.id)); interaction.client.afkCheckTimers.delete(interaction.user.id); }
-        if (interaction.client.afkToleranceTimers.has(interaction.user.id)) { clearTimeout(interaction.client.afkToleranceTimers.get(interaction.user.id)); interaction.client.afkToleranceTimers.delete(interaction.user.id); }
+        const userId = interaction.user.id;
+        const guildId = interaction.guild.id;
 
-        await interaction.deferUpdate();
+        // Buscar sessão aberta
+        const result = await db.query(`
+            SELECT * FROM ponto_sessions 
+            WHERE user_id = $1 AND guild_id = $2 AND status = 'OPEN'
+        `, [userId, guildId]);
+
+        if (result.rows.length === 0) {
+            return interaction.reply({ content: "❌ Nenhuma sessão ativa encontrada.", flags: 1 << 6 });
+        }
+
+        const session = result.rows[0];
+
+        if (session.is_paused) {
+            return interaction.reply({ content: "⚠️ Sua sessão já está pausada.", flags: 1 << 6 });
+        }
+
+        // LÓGICA DE PAUSA: Apenas marcamos que pausou AGORA.
+        // O tempo decorrido até agora será calculado dinamicamente no Utils.
+        const now = Date.now();
+
+        await db.query(`
+            UPDATE ponto_sessions 
+            SET is_paused = TRUE, last_pause_time = $1
+            WHERE id = $2
+        `, [now, session.id]);
+
+        // Recupera sessão atualizada para mostrar na UI
+        const updatedSession = await db.query('SELECT * FROM ponto_sessions WHERE id = $1', [session.id]);
         
-        const session = (await db.query('SELECT * FROM ponto_sessions WHERE user_id = $1 AND guild_id = $2', [interaction.user.id, interaction.guild.id])).rows[0];
-        if (!session || session.is_paused) return;
-
-        await db.query('UPDATE ponto_sessions SET is_paused = true, last_pause_time = NOW() WHERE session_id = $1', [session.session_id]);
-
-        const settings = (await db.query('SELECT * FROM guild_settings WHERE guild_id = $1', [interaction.guild.id])).rows[0];
-        const updatedSession = (await db.query('SELECT * FROM ponto_sessions WHERE session_id = $1', [session.session_id])).rows[0];
-        
-        const dashboardPayload = settings.ponto_dashboard_v2_enabled 
-            ? { components: generatePontoDashboardV2(interaction, settings, updatedSession), flags: V2_FLAG } 
-            : generatePontoDashboard(interaction, updatedSession);
-            
-        await interaction.editReply(dashboardPayload);
+        const ui = pontoDashboard(updatedSession.rows[0], interaction.member);
+        await interaction.update(ui);
     }
 };
