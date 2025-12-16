@@ -1,8 +1,40 @@
-const { AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const db = require('../../database.js');
 const { generateProfileCard } = require('../../utils/profileGenerator.js');
 
 module.exports = {
+    // --- 1. DEFINIÇÃO DO COMANDO (Isso faz aparecer a opção de mensagem) ---
+    data: new SlashCommandBuilder()
+        .setName('social')
+        .setDescription('Sistema de perfil e reputação social')
+        .addSubcommand(sub => 
+            sub.setName('perfil')
+                .setDescription('Vê o cartão de perfil de alguém')
+                .addUserOption(option => 
+                    option.setName('usuario')
+                        .setDescription('O usuário para ver o perfil (opcional)')))
+        .addSubcommand(sub => 
+            sub.setName('bio')
+                .setDescription('Define sua biografia no perfil')
+                .addStringOption(option => 
+                    option.setName('texto')
+                        .setDescription('Sua nova biografia (max 150 chars)')
+                        .setRequired(true)
+                        .setMaxLength(150)))
+        .addSubcommand(sub => 
+            sub.setName('elogiar')
+                .setDescription('Elogia um membro e aumenta a reputação dele')
+                .addUserOption(option => 
+                    option.setName('usuario')
+                        .setDescription('Quem você quer elogiar?')
+                        .setRequired(true))
+                .addStringOption(option => 
+                    option.setName('mensagem') // <--- AQUI ESTÁ A OPÇÃO QUE FALTAVA
+                        .setDescription('Deixe um recado carinhoso (aparece no perfil)')
+                        .setRequired(false)
+                        .setMaxLength(100))),
+
+    // --- 2. LÓGICA DO COMANDO ---
     async execute(interaction) {
         const subcommand = interaction.options.getSubcommand();
 
@@ -20,7 +52,7 @@ module.exports = {
                 const [pontoRes, socialRes, repLogsRes] = await Promise.all([
                     db.query('SELECT total_ms FROM ponto_leaderboard WHERE user_id = $1 AND guild_id = $2', [targetUser.id, interaction.guild.id]),
                     db.query('SELECT * FROM social_users WHERE user_id = $1', [targetUser.id]),
-                    // TENTA buscar a mensagem. Se der erro de coluna não existente, vai cair no catch
+                    // TENTA buscar a mensagem. 
                     db.query('SELECT author_id, timestamp, message FROM social_rep_logs WHERE target_id = $1 ORDER BY timestamp DESC LIMIT 1', [targetUser.id])
                 ]);
 
@@ -32,7 +64,7 @@ module.exports = {
                         lastRepUserObj = {
                             user: authorUser,
                             date: repLogsRes.rows[0].timestamp,
-                            message: repLogsRes.rows[0].message // Passa a mensagem para o gerador
+                            message: repLogsRes.rows[0].message
                         };
                     } catch (e) {}
                 }
@@ -41,13 +73,11 @@ module.exports = {
                 const memberData = {
                     ponto: pontoRes.rows[0] || { total_ms: 0 },
                     social: socialRes.rows[0] || { reputation: 0, bio: 'Sem biografia...', background_url: null },
-                    
                     joinedAt: targetMember.joinedAt,
                     highestRoleName: targetMember.roles.highest.name,
                     highestRoleColor: targetMember.roles.highest.hexColor,
                     guildIconUrl: interaction.guild.iconURL({ extension: 'png', size: 256 }),
                     roleCount: targetMember.roles.cache.size - 1,
-                    
                     lastRepUser: lastRepUserObj
                 };
 
@@ -84,9 +114,8 @@ module.exports = {
                         if (targetUser.id === i.user.id) return i.reply({ content: "❌ Amor próprio é tudo, mas aqui não conta!", ephemeral: true });
                         
                         try {
-                            // Salva elogio padrão (via botão não tem como escrever mensagem ainda)
+                            // Salva elogio padrão via botão
                             await db.query(`INSERT INTO social_users (user_id, reputation) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET reputation = social_users.reputation + 1`, [targetUser.id]);
-                            // Mensagem padrão para clique no botão
                             const defaultMsg = "Gostei do seu perfil! (Botão)";
                             await db.query(`INSERT INTO social_rep_logs (target_id, author_id, timestamp, message) VALUES ($1, $2, NOW(), $3)`, [targetUser.id, i.user.id, defaultMsg]);
                             await db.query(`INSERT INTO social_users (user_id, last_rep_given) VALUES ($1, NOW()) ON CONFLICT (user_id) DO UPDATE SET last_rep_given = NOW()`, [i.user.id]);
@@ -94,7 +123,7 @@ module.exports = {
                             await i.reply({ content: `💖 Elogio enviado para **${targetUser.username}**!`, ephemeral: true });
                         } catch (err) {
                             console.error(err);
-                            await i.reply({ content: "❌ Erro. (Verifique se a coluna 'message' existe na tabela social_rep_logs)", ephemeral: true });
+                            await i.reply({ content: "❌ Erro ao salvar.", ephemeral: true });
                         }
                     }
 
@@ -102,7 +131,6 @@ module.exports = {
                         if (i.customId === 'voltar_perfil') {
                             await i.update({ files: [attachment], embeds: [], components: [rowMain] });
                         } else {
-                            // Busca histórico com mensagens
                             const fullLogs = await db.query('SELECT author_id, timestamp, message FROM social_rep_logs WHERE target_id = $1 ORDER BY timestamp DESC LIMIT 50', [targetUser.id]);
                             await handlePagination(i, fullLogs.rows, targetUser);
                         }
@@ -111,7 +139,7 @@ module.exports = {
 
             } catch (err) {
                 console.error(err);
-                if (!interaction.replied) await interaction.editReply("❌ Erro ao gerar perfil. Verifique se o banco de dados tem a coluna 'message'.");
+                if (!interaction.replied) await interaction.editReply("❌ Erro ao gerar perfil.");
             }
         }
 
@@ -124,18 +152,17 @@ module.exports = {
             return interaction.reply({ content: `✅ Bio atualizada!\n> "${bioText}"`, ephemeral: true });
         }
 
-        // --- SUBCOMANDO: ELOGIAR (Direto) ---
+        // --- SUBCOMANDO: ELOGIAR ---
         if (subcommand === 'elogiar') {
             const targetUser = interaction.options.getUser('usuario');
-            // Tenta pegar a mensagem opcional do comando. Se não tiver, usa padrão.
-            const message = interaction.options.getString('mensagem') || interaction.options.getString('motivo') || "Um elogio para você!"; 
+            // Captura a mensagem do comando
+            const message = interaction.options.getString('mensagem') || "Um elogio para você!"; 
 
             if (targetUser.id === interaction.user.id) return interaction.reply({ content: "❌ Você não pode se elogiar.", ephemeral: true });
             
             try {
                 await db.query(`INSERT INTO social_users (user_id, reputation) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET reputation = social_users.reputation + 1`, [targetUser.id]);
                 
-                // INSERT COM MENSAGEM
                 await db.query(`INSERT INTO social_rep_logs (target_id, author_id, timestamp, message) VALUES ($1, $2, NOW(), $3)`, [targetUser.id, interaction.user.id, message]);
                 
                 await db.query(`INSERT INTO social_users (user_id, last_rep_given) VALUES ($1, NOW()) ON CONFLICT (user_id) DO UPDATE SET last_rep_given = NOW()`, [interaction.user.id]);
@@ -143,7 +170,7 @@ module.exports = {
                 return interaction.reply({ content: `🌟 Elogio enviado para **${targetUser.username}**!\n> *"${message}"*`, ephemeral: true });
             } catch (err) {
                 console.error(err);
-                return interaction.reply({ content: "❌ Erro ao salvar. Verifique se a coluna 'message' existe no banco.", ephemeral: true });
+                return interaction.reply({ content: "❌ Erro ao salvar elogio.", ephemeral: true });
             }
         }
     }
