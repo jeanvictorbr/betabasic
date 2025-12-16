@@ -114,7 +114,6 @@ async function generateProfileCard(targetUser, memberData) {
     ctx.fillStyle = '#aaaaaa';
     ctx.font = '14px "Poppins", sans-serif';
     ctx.textAlign = 'center';
-    // Alterado para "Membro desde"
     ctx.fillText(`Membro desde: ${joinedDate}`, avatarX + (avatarSize / 2), roleY + 55);
     ctx.textAlign = 'left';
 
@@ -150,9 +149,9 @@ async function generateProfileCard(targetUser, memberData) {
     ctx.fillStyle = '#cccccc';
     ctx.font = 'italic 18px "Poppins", sans-serif';
     const bio = memberData.social?.bio || "Digite /social bio para alterar esta mensagem...";
-    wrapText(ctx, bio, textStartX, 180, 500, 25, 3); // Limite de 3 linhas para bio
+    wrapText(ctx, bio, textStartX, 180, 500, 25, 3); 
 
-    // --- 5. STATS (Labels Alterados) ---
+    // --- 5. STATS ---
     const statsY = 300;
     const boxWidth = 160;
     const spacing = 20;
@@ -163,50 +162,51 @@ async function generateProfileCard(targetUser, memberData) {
 
     // Box 1: Cargos
     drawModernStatBox(ctx, iconRole, 'Cargos', `${memberData.roleCount || 0}`, textStartX, statsY, '#9b59b6');
-    // Box 2: Elogios (Antes era Reputação)
+    // Box 2: Elogios
     drawModernStatBox(ctx, iconRep, 'Elogios', `${memberData.social?.reputation || 0}`, textStartX + boxWidth + spacing, statsY, '#f1c40f');
-    // Box 3: Tempo de Ponto (Antes era Online)
+    // Box 3: Tempo de Ponto
     drawModernStatBox(ctx, iconTime, 'Tempo de Ponto', formatTime(memberData.ponto?.total_ms || 0), textStartX + (boxWidth + spacing) * 2, statsY, '#3498db');
 
-    // --- 6. ÚLTIMO ELOGIO (Com Texto) ---
+    // --- 6. ÚLTIMO ELOGIO (AJUSTADO) ---
     const badgeAreaY = 400;
     
     // Fundo da área
     ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-    roundRect(ctx, textStartX, badgeAreaY, 520, 75, 15, true, false); // Aumentei altura pra caber texto
+    roundRect(ctx, textStartX, badgeAreaY, 520, 75, 15, true, false); 
 
     const iconHeart = await loadImage(ICONS.HEART).catch(()=>null);
     if (iconHeart) ctx.drawImage(iconHeart, textStartX + 15, badgeAreaY + 18, 40, 40);
 
-    const lastRep = memberData.lastRepUser; // { user, date, message }
+    const lastRep = memberData.lastRepUser; // { displayName, avatarUrl, date, message }
     
-    if (lastRep && lastRep.user) {
+    if (lastRep && lastRep.displayName) {
         const senderX = textStartX + 70;
         const senderY = badgeAreaY + 22;
 
-        // "De: @Fulano"
+        // "De: NomeDaGuild"
         ctx.fillStyle = '#ff6b81';
         ctx.font = 'bold 16px "Poppins", sans-serif';
-        const fromText = `De: @${lastRep.user.username}`;
+        // Usa o displayName (Apelido na Guild) que foi passado pelo handler
+        const fromText = `De: ${lastRep.displayName}`;
         ctx.fillText(fromText, senderX, senderY);
 
-        // Data pequena ao lado
+        // DATA - MOVIDA PARA A DIREITA (Canto do box)
         ctx.fillStyle = '#666';
         ctx.font = '12px "Poppins", sans-serif';
         const dateStr = new Date(lastRep.date).toLocaleDateString('pt-BR');
-        const fromWidth = ctx.measureText(fromText).width;
-        ctx.fillText(` • ${dateStr}`, senderX + fromWidth, senderY);
+        // Posição X fixa na direita do box (Start + 520 largura - margem)
+        ctx.textAlign = 'right';
+        ctx.fillText(dateStr, textStartX + 500, senderY); 
+        ctx.textAlign = 'left'; // Reset
 
-        // Mensagem do Elogio (Entre aspas e com quebra de linha)
-        ctx.fillStyle = '#dddddd'; // Cor do texto do elogio
+        // Mensagem
+        ctx.fillStyle = '#dddddd';
         ctx.font = 'italic 15px "Poppins", sans-serif';
         
         const messageText = lastRep.message ? `"${lastRep.message}"` : '"Enviou um elogio!"';
-        // Envolve o texto em até 2 linhas dentro do box
         wrapText(ctx, messageText, senderX, senderY + 22, 430, 20, 2); 
 
     } else {
-        // Se ninguém elogiou ainda
         ctx.fillStyle = '#888';
         ctx.font = 'italic 16px "Poppins", sans-serif';
         ctx.fillText("Nenhum elogio recebido ainda... seja o primeiro!", textStartX + 70, badgeAreaY + 45);
@@ -222,24 +222,20 @@ function drawModernStatBox(ctx, icon, label, value, x, y, color) {
     ctx.fillStyle = grd;
     roundRect(ctx, x, y, 160, 80, 15, true, false);
 
-    // Indicador lateral
     ctx.fillStyle = color;
     roundRect(ctx, x, y + 20, 4, 40, 2, true, false);
 
-    if (icon) {
-        ctx.drawImage(icon, x + 15, y + 20, 40, 40);
-    }
+    if (icon) ctx.drawImage(icon, x + 15, y + 20, 40, 40);
 
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 24px "Poppins", sans-serif';
     ctx.fillText(value, x + 65, y + 35);
 
     ctx.fillStyle = '#aaa';
-    ctx.font = '11px "Poppins", sans-serif'; // Fonte menor pro label caber
+    ctx.font = '11px "Poppins", sans-serif';
     ctx.fillText(label.toUpperCase(), x + 65, y + 55);
 }
 
-// Função wrapText melhorada com limite de linhas
 function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 10) {
     const words = text.split(' ');
     let line = '';
@@ -248,11 +244,8 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 10) {
     for(let n = 0; n < words.length; n++) {
         const testLine = line + words[n] + ' ';
         const metrics = ctx.measureText(testLine);
-        const testWidth = metrics.width;
-        
-        if (testWidth > maxWidth && n > 0) {
+        if (metrics.width > maxWidth && n > 0) {
             if (linesDrawn >= maxLines - 1) {
-                // Última linha permitida, adiciona ... e para
                 ctx.fillText(line + "...", x, y);
                 return;
             }
