@@ -6,11 +6,10 @@ try {
     registerFont(path.join(__dirname, '../assets/fonts/Poppins-Regular.ttf'), { family: 'Poppins', weight: 'regular' });
 } catch (e) {}
 
-// Ícones de Rank (Medalhas PNG)
 const RANK_ICONS = {
-    1: 'https://cdn-icons-png.flaticon.com/512/2583/2583344.png', // Ouro
-    2: 'https://cdn-icons-png.flaticon.com/512/2583/2583319.png', // Prata
-    3: 'https://cdn-icons-png.flaticon.com/512/2583/2583434.png', // Bronze
+    1: 'https://cdn-icons-png.flaticon.com/512/2583/2583344.png',
+    2: 'https://cdn-icons-png.flaticon.com/512/2583/2583319.png',
+    3: 'https://cdn-icons-png.flaticon.com/512/2583/2583434.png',
 };
 
 function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
@@ -31,7 +30,6 @@ function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
     if (stroke) ctx.stroke();
 }
 
-// Função para cortar texto
 function shortText(ctx, text, maxWidth) {
     let short = text;
     if (ctx.measureText(short).width > maxWidth) {
@@ -43,76 +41,80 @@ function shortText(ctx, text, maxWidth) {
     return short;
 }
 
-async function generateRanking(data, guildName) {
+// ADICIONADO: Parâmetros page e totalPages
+async function generateRanking(data, guildName, page = 1, totalPages = 1) {
     const width = 900;
     const height = 850;
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
 
-    // --- 1. FUNDO PREMIUM DARK (Original) ---
+    // --- 1. FUNDO PREMIUM DARK COM NEVE ---
     const bgGradient = ctx.createRadialGradient(width/2, height/2, 100, width/2, height/2, 600);
-    bgGradient.addColorStop(0, '#1a1a2e'); // Azul escuro profundo
-    bgGradient.addColorStop(1, '#0f0f1a'); // Preto azulado
+    bgGradient.addColorStop(0, '#1a1a2e');
+    bgGradient.addColorStop(1, '#0f0f1a');
     ctx.fillStyle = bgGradient;
     ctx.fillRect(0, 0, width, height);
 
-    // --- 2. EFEITO DE NEVE (Sutil) ---
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; // Neve transparente
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; 
     for(let i=0; i<100; i++) {
         const x = Math.random() * width;
         const y = Math.random() * height;
-        const r = Math.random() * 2.5; // Flocos pequenos
+        const r = Math.random() * 2.5; 
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI*2);
         ctx.fill();
     }
 
-    // Moldura Dourada
     ctx.strokeStyle = '#FFD700';
     ctx.lineWidth = 6;
     ctx.strokeRect(0, 0, width, height);
 
-    // --- 3. CABEÇALHO ---
+    // --- 2. CABEÇALHO ---
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 36px "Poppins", "Sans"';
     ctx.textAlign = 'center';
     ctx.shadowColor = '#FFD700'; 
     ctx.shadowBlur = 10;
     ctx.fillText(`🏆 RANKING: ${guildName.toUpperCase()}`, width / 2, 70);
-    ctx.shadowBlur = 0; // Reset shadow
+    ctx.shadowBlur = 0;
 
+    // Subtítulo com Página
     ctx.fillStyle = '#FFD700';
     ctx.font = '18px "Poppins", "Sans"';
-    ctx.fillText("Top 10 Membros Mais Ativos", width / 2, 100);
+    ctx.fillText(`Top Membros Mais Ativos • Página ${page} de ${totalPages}`, width / 2, 105);
 
-    // --- 4. LISTA DE USUÁRIOS ---
+    // --- 3. LISTA DE USUÁRIOS ---
     let y = 160;
     const rowHeight = 65;
 
     for (let i = 0; i < data.length; i++) {
         const item = data[i];
-        const rank = i + 1;
+        
+        // CALCULA O RANK REAL BASEADO NA PÁGINA
+        // Ex: Página 1 (i=0 -> rank 1). Página 2 (i=0 -> rank 11)
+        const rank = ((page - 1) * 10) + (i + 1);
 
-        // Fundo da linha (Zebrado sutil)
-        if (rank % 2 !== 0) {
+        // Fundo Zebra
+        if (i % 2 !== 0) {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
             roundRect(ctx, 50, y - 45, 800, 55, 10, true, false);
         }
 
-        // --- ÍCONE DE RANK (PNG ou Texto) ---
+        // Ícone ou Texto de Rank
         if (RANK_ICONS[rank]) {
             try {
                 const medal = await loadImage(RANK_ICONS[rank]);
-                ctx.drawImage(medal, 70, y - 50, 45, 45); // Medalha
+                ctx.drawImage(medal, 70, y - 50, 45, 45);
             } catch (e) {}
         } else {
-            // Texto normal para 4º lugar em diante
             ctx.fillStyle = '#888';
             ctx.font = 'bold 28px "Poppins"';
-            ctx.fillText(`#${rank}`, 92, y - 18);
+            ctx.textAlign = 'center';
+            ctx.fillText(`#${rank}`, 92, y - 15);
+            ctx.textAlign = 'left'; // Reset para o nome não bugar
         }
 
-        // --- AVATAR ---
+        // Avatar
         const avatarSize = 44;
         const avatarX = 150;
         
@@ -129,24 +131,24 @@ async function generateRanking(data, guildName) {
         }
         ctx.restore();
 
-        // Borda Dourada no Top 3, Cinza nos outros
+        // Borda Dourada Top 3
         ctx.strokeStyle = rank <= 3 ? '#FFD700' : '#555';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(avatarX + avatarSize/2, y - 27, avatarSize/2, 0, Math.PI*2);
         ctx.stroke();
 
-        // --- NOME (Da Guilda) ---
+        // Nome
         ctx.textAlign = 'left';
-        ctx.fillStyle = rank === 1 ? '#FFD700' : '#FFFFFF'; // Top 1 Amarelo
+        ctx.fillStyle = rank === 1 ? '#FFD700' : '#FFFFFF';
         ctx.font = rank <= 3 ? 'bold 24px "Poppins"' : '22px "Poppins"';
         
         const name = shortText(ctx, item.displayName, 400);
         ctx.fillText(name, 220, y - 20);
 
-        // --- TEMPO ---
+        // Tempo
         ctx.textAlign = 'right';
-        ctx.fillStyle = '#4cd137'; // Verde Neon
+        ctx.fillStyle = '#4cd137'; 
         ctx.font = 'bold 22px "Poppins"';
         ctx.fillText(item.pointsStr, 830, y - 20);
 
