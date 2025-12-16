@@ -1,235 +1,200 @@
 const { createCanvas, loadImage, registerFont } = require('canvas');
 const path = require('path');
 
-// Registre sua fonte se tiver (opcional, mas recomendado)
-// registerFont(path.join(__dirname, '../assets/fonts/Poppins-Bold.ttf'), { family: 'Poppins', weight: 'bold' });
+// Tente registrar a fonte se ela existir no seu projeto, senão usa sans-serif padrão
+try {
+    registerFont(path.join(__dirname, '../assets/fonts/Poppins-Bold.ttf'), { family: 'Poppins', weight: 'bold' });
+    registerFont(path.join(__dirname, '../assets/fonts/Poppins-Regular.ttf'), { family: 'Poppins', weight: 'regular' });
+} catch (e) { /* Fonte não encontrada, usando padrão */ }
 
-// Função auxiliar para carregar imagens com tratamento de erro
-async function loadIcon(url) {
-    try {
-        return await loadImage(url);
-    } catch (e) {
-        return null; // Retorna null se falhar para não quebrar tudo
-    }
-}
-
-// URLs dos Ícones (Substitua por links seus ou assets locais se preferir)
+// URLs de ícones fixos (PNG) para substituir os emojis feios
 const ICONS = {
-    COIN: 'https://cdn-icons-png.flaticon.com/512/2454/2454269.png', // Exemplo Moeda Dourada
-    REP: 'https://cdn-icons-png.flaticon.com/512/1828/1828884.png',  // Exemplo Estrela
-    ACTIVE: 'https://cdn-icons-png.flaticon.com/512/2983/2983967.png' // Exemplo Raio
+    COIN: 'https://cdn-icons-png.flaticon.com/512/2454/2454269.png', // Moeda
+    REP: 'https://cdn-icons-png.flaticon.com/512/1828/1828884.png',  // Estrela
+    TIME: 'https://cdn-icons-png.flaticon.com/512/2088/2088617.png', // Relógio
+    BADGE_BG: 'https://cdn-icons-png.flaticon.com/512/616/616490.png' // Coroa/Medalha genérica
 };
 
-async function generateProfileCard(user, userData) {
-    const canvas = createCanvas(800, 450);
+// Função para formatar ms em horas (ex: 12h 30m)
+function formatTime(ms) {
+    if (!ms) return "0h";
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m`;
+}
+
+async function generateProfileCard(targetUser, memberData) {
+    const canvas = createCanvas(900, 500); // Tamanho ajustado
     const ctx = canvas.getContext('2d');
 
-    // 1. FUNDO (Background)
-    // Se tiver imagem de fundo personalizada:
-    // const background = await loadImage(userData.backgroundUrl || './assets/default_bg.png');
-    // ctx.drawImage(background, 0, 0, 800, 450);
-    
-    // Fundo Gradiente Moderno (Caso não tenha imagem)
-    const grd = ctx.createLinearGradient(0, 0, 800, 450);
-    grd.addColorStop(0, '#1a2a40');
-    grd.addColorStop(1, '#0f1724');
-    ctx.fillStyle = grd;
-    ctx.fillRect(0, 0, 800, 450);
-
-    // Efeito de "pattern" (opcional - pontilhados)
-    ctx.fillStyle = 'rgba(255,255,255,0.03)';
-    for(let i=0; i<800; i+=20) {
-        for(let j=0; j<450; j+=20) {
-            if((i+j)%40 === 0) ctx.fillRect(i, j, 2, 2);
+    // --- 1. FUNDO ---
+    // Se o usuário tiver background personalizado, use. Senão, use o tema padrão/natalino
+    let background;
+    try {
+        if (memberData.social?.background_url) {
+            background = await loadImage(memberData.social.background_url);
+        } else {
+            // Fundo padrão gradiente escuro
+            const grd = ctx.createLinearGradient(0, 0, 900, 500);
+            grd.addColorStop(0, '#121212');
+            grd.addColorStop(1, '#1F1F1F');
+            ctx.fillStyle = grd;
+            ctx.fillRect(0, 0, 900, 500);
         }
+        if (background) ctx.drawImage(background, 0, 0, 900, 500);
+    } catch (e) {
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, 900, 500);
     }
 
-    // 2. AVATAR (Lado Esquerdo)
+    // Camada escura semitransparente para melhorar leitura
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(20, 20, 860, 460);
+
+    // --- 2. AVATAR ---
     const avatarSize = 180;
-    const avatarX = 50;
+    const avatarX = 60;
     const avatarY = 80;
 
-    // Sombra do Avatar
-    ctx.save();
-    ctx.shadowColor = '#000000';
-    ctx.shadowBlur = 20;
-    ctx.fillStyle = '#000';
-    ctx.beginPath();
-    ctx.arc(avatarX + avatarSize/2, avatarY + avatarSize/2, avatarSize/2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Corte circular para o Avatar
     ctx.save();
     ctx.beginPath();
-    ctx.arc(avatarX + avatarSize/2, avatarY + avatarSize/2, avatarSize/2, 0, Math.PI * 2);
+    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2, true);
     ctx.closePath();
     ctx.clip();
-
+    
     try {
-        const avatar = await loadImage(user.displayAvatarURL({ extension: 'png', size: 512 }));
+        const avatar = await loadImage(targetUser.displayAvatarURL({ extension: 'png', size: 512 }));
         ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
     } catch (e) {
-        // Fallback se falhar
-        ctx.fillStyle = '#3498db';
+        ctx.fillStyle = '#ccc';
         ctx.fillRect(avatarX, avatarY, avatarSize, avatarSize);
     }
     ctx.restore();
 
     // Borda do Avatar
-    ctx.strokeStyle = '#3498db';
-    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.arc(avatarX + avatarSize/2, avatarY + avatarSize/2, avatarSize/2, 0, Math.PI * 2);
+    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2, true);
     ctx.stroke();
 
-    // 3. TEXTOS (Nome e Bio)
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 40px "Sans-serif"'; // Use "Poppins" se registrou
-    ctx.fillText(user.username, 270, 100);
-
-    ctx.fillStyle = '#8fa3bf';
-    ctx.font = '20px "Sans-serif"';
-    ctx.fillText(`@${user.tag}`, 270, 130);
-
-    // Bio (com quebra de linha simples se precisar, aqui simplificado)
-    ctx.fillStyle = '#cbd5e0';
-    ctx.font = 'italic 18px "Sans-serif"';
-    // Desenha uma linha decorativa
-    ctx.fillRect(270, 145, 3, 25); 
-    ctx.fillText(userData.bio || 'Sem biografia definida.', 280, 165);
-
-    // 4. ESTATÍSTICAS (Stats) - Aqui corrigimos os emojis feios
-    const iconSize = 35;
-    const statY = 220;
+    // --- 3. INFORMAÇÕES DE TEXTO ---
+    ctx.fillStyle = '#ffffff';
     
-    // Carregar ícones
-    const coinImg = await loadIcon(ICONS.COIN);
-    const repImg = await loadIcon(ICONS.REP);
-    const activeImg = await loadIcon(ICONS.ACTIVE);
+    // Nome Display (Apelido ou Username)
+    ctx.font = 'bold 42px "Poppins", sans-serif';
+    const displayName = targetUser.globalName || targetUser.username;
+    ctx.fillText(displayName, 280, 100);
 
-    // Box 1: Reputação
-    drawStatBox(ctx, 270, statY, repImg, 'Reputação', userData.reputacao || 0, '#f1c40f');
+    // Tag Real (@username) - CORRIGIDO
+    ctx.fillStyle = '#aaaaaa';
+    ctx.font = '24px "Poppins", sans-serif';
+    ctx.fillText(`@${targetUser.username}`, 280, 135);
+
+    // Bio
+    ctx.fillStyle = '#dddddd';
+    ctx.font = 'italic 20px "Poppins", sans-serif';
+    const bio = memberData.social?.bio || "Nenhuma biografia definida.";
+    wrapText(ctx, bio, 280, 175, 550, 25);
+
+    // --- 4. ESTATÍSTICAS (Com ícones PNG) ---
+    const statsY = 280;
+    const statsX = 280;
+    const spacing = 180;
+
+    // Ícones carregados
+    const iconCoin = await loadImage(ICONS.COIN).catch(() => null);
+    const iconRep = await loadImage(ICONS.REP).catch(() => null);
+    const iconTime = await loadImage(ICONS.TIME).catch(() => null);
+
+    // Box: Money
+    drawStat(ctx, iconCoin, 'Saldo', `R$ ${memberData.flow?.balance || 0}`, statsX, statsY, '#f1c40f');
     
-    // Box 2: Atividade
-    drawStatBox(ctx, 430, statY, activeImg, 'Atividade', userData.atividade || '0h', '#2ecc71');
+    // Box: Reputação
+    drawStat(ctx, iconRep, 'Reputação', `${memberData.social?.reputation || 0}`, statsX + spacing, statsY, '#e74c3c');
 
-    // Box 3: Dinheiro (Moedas) - Destaque no topo direito ou na grade
-    drawMoneyBadge(ctx, 600, 60, coinImg, userData.money || 0);
+    // Box: Tempo de Ponto - CORRIGIDO
+    const pontoTime = formatTime(memberData.ponto?.total_ms || 0);
+    drawStat(ctx, iconTime, 'Atividade', pontoTime, statsX + (spacing * 2), statsY, '#3498db');
 
+    // --- 5. BADGES/ELOGIOS (Desenhado por último) ---
+    // Área de badges na parte inferior
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.roundRect(60, 380, 780, 80, 10); // Container largo
+    ctx.fill();
 
-    // 5. BADGES / ELOGIOS (A Parte que não aparecia)
-    // O segredo é desenhar ISSO por último para ficar em cima de tudo
-    if (userData.badges && userData.badges.length > 0) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        // Fundo da área de badges
-        roundRect(ctx, 270, 320, 480, 80, 15, true, false); 
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 16px "Poppins", sans-serif';
+    ctx.fillText("ÚLTIMAS CONQUISTAS:", 75, 400);
+
+    let badgeX = 80;
+    // Pega as badges (cargos ou conquistas)
+    const badges = memberData.badges || []; 
+    // Desenha apenas as 10 primeiras para caber
+    for (let i = 0; i < Math.min(badges.length, 10); i++) {
+        const badge = badges[i];
+        // Fundo do ícone
+        ctx.fillStyle = '#2c3e50';
+        ctx.beginPath();
+        ctx.arc(badgeX + 25, 440, 20, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Tenta desenhar ícone (se for texto emoji, usa fillText)
+        ctx.font = '24px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff';
+        // Se badge.icon for URL, teria que carregar imagem, assumindo texto/emoji por enquanto
+        // Se for "emojis feios" aqui também, o ideal é mapear para imagens se possível.
+        ctx.fillText(badge.icon || '🏅', badgeX + 25, 442); 
         
-        ctx.fillStyle = '#8fa3bf';
-        ctx.font = '12px "Sans-serif"';
-        ctx.fillText('CONQUISTAS & ELOGIOS:', 285, 340);
-
-        let badgeX = 285;
-        const badgeY = 355;
+        // Reseta
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
         
-        for (const badge of userData.badges) {
-            // Desenha o círculo do badge
-            ctx.beginPath();
-            ctx.arc(badgeX + 16, badgeY + 16, 18, 0, Math.PI * 2);
-            ctx.fillStyle = '#34495e';
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            // Tenta desenhar o ícone do badge (se for emoji texto, usa fillText, se for imagem, drawImage)
-            // Assumindo que seus badges salvos no banco sejam Emojis texto por enquanto:
-            ctx.font = '22px "Sans-serif"';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = '#FFF';
-            ctx.fillText(badge.icon || '🏅', badgeX + 16, badgeY + 18); // Centralizado
-            
-            // Reseta alinhamento
-            ctx.textAlign = 'start'; 
-            ctx.textBaseline = 'alphabetic';
-
-            badgeX += 45; // Espaçamento
-        }
+        badgeX += 55;
     }
 
     return canvas.toBuffer();
 }
 
-// Função auxiliar para desenhar caixas de stats bonitas
-function drawStatBox(ctx, x, y, iconImage, label, value, color) {
-    // Fundo do box
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-    roundRect(ctx, x, y, 140, 70, 10, true, false);
-    
-    // Ícone
-    if (iconImage) {
-        ctx.drawImage(iconImage, x + 10, y + 15, 40, 40);
+function drawStat(ctx, icon, label, value, x, y, color) {
+    if (icon) {
+        ctx.drawImage(icon, x, y, 40, 40);
     } else {
-        // Fallback se a imagem não carregar
+        // Fallback círculo colorido se imagem falhar
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(x + 30, y + 35, 15, 0, Math.PI*2);
+        ctx.arc(x + 20, y + 20, 20, 0, Math.PI*2);
         ctx.fill();
     }
 
-    // Texto Valor
-    ctx.fillStyle = '#FFF';
-    ctx.font = 'bold 24px "Sans-serif"';
-    ctx.fillText(value, x + 60, y + 35);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 28px "Poppins", sans-serif';
+    ctx.fillText(value, x + 55, y + 25);
 
-    // Texto Label
-    ctx.fillStyle = color;
-    ctx.font = '12px "Sans-serif"';
-    ctx.fillText(label.toUpperCase(), x + 60, y + 55);
+    ctx.fillStyle = color; // Cor do label
+    ctx.font = 'bold 14px "Poppins", sans-serif';
+    ctx.fillText(label.toUpperCase(), x + 55, y + 45);
 }
 
-function drawMoneyBadge(ctx, x, y, iconImage, value) {
-    ctx.fillStyle = '#f39c12';
-    // Desenha um "pill" shape
-    roundRect(ctx, x, y, 150, 40, 20, true, false);
-    
-    if (iconImage) {
-        ctx.drawImage(iconImage, x + 10, y + 5, 30, 30);
-    } else {
-        ctx.fillStyle = '#000';
-        ctx.fillText('$', x + 15, y + 25);
+// Função auxiliar para quebrar texto
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    const words = text.split(' ');
+    let line = '';
+    for(let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        const testWidth = metrics.width;
+        if (testWidth > maxWidth && n > 0) {
+            ctx.fillText(line, x, y);
+            line = words[n] + ' ';
+            y += lineHeight;
+        } else {
+            line = testLine;
+        }
     }
-
-    ctx.fillStyle = '#1a2a40';
-    ctx.font = 'bold 22px "Sans-serif"';
-    ctx.fillText(value, x + 50, y + 28);
-}
-
-// Função utilitária para retângulo arredondado (que já deve ter no seu código)
-function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
-  if (typeof stroke === 'undefined') stroke = true;
-  if (typeof radius === 'undefined') radius = 5;
-  if (typeof radius === 'number') radius = {tl: radius, tr: radius, br: radius, bl: radius};
-  else {
-    var defaultRadius = {tl: 0, tr: 0, br: 0, bl: 0};
-    for (var side in defaultRadius) {
-      radius[side] = radius[side] || defaultRadius[side];
-    }
-  }
-  ctx.beginPath();
-  ctx.moveTo(x + radius.tl, y);
-  ctx.lineTo(x + width - radius.tr, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
-  ctx.lineTo(x + width, y + height - radius.br);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
-  ctx.lineTo(x + radius.bl, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
-  ctx.lineTo(x, y + radius.tl);
-  ctx.quadraticCurveTo(x, y, x + radius.tl, y);
-  ctx.closePath();
-  if (fill) ctx.fill();
-  if (stroke) ctx.stroke();
+    ctx.fillText(line, x, y);
 }
 
 module.exports = { generateProfileCard };
