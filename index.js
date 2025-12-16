@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const { checkExpiringFeatures } = require('./utils/premiumExpiryMonitor.js');
 const { startPurgeMonitor } = require('./utils/purgeMonitor');
 const { checkTokenUsage } = require('./utils/tokenMonitor.js');
+const { autoFixGlobalRanking } = require('./utils/autoFixRanking.js');
 const { startPontoUpdateLoop } = require('./utils/pontoLogLoop.js');
 const voiceHubManager = require('./utils/voiceHubManager.js');
 const MusicOrchestrator = require('./utils/MusicOrchestrator.js');
@@ -356,6 +357,7 @@ console.log('--- Handlers Carregados ---');
 
 
 client.once(Events.ClientReady, async () => {
+    await autoFixGlobalRanking();
     startPontoUpdateLoop(client);
     startGiveawayMonitor(client);
     startVerificationLoop(client);
