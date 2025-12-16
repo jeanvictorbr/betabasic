@@ -1,8 +1,5 @@
 const { createCanvas, loadImage } = require('canvas');
 
-/**
- * Utilitário para desenhar retângulos arredondados
- */
 function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
     if (typeof stroke === 'undefined') stroke = true;
     if (typeof radius === 'undefined') radius = 5;
@@ -29,9 +26,6 @@ function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
     if (stroke) ctx.stroke();
 }
 
-/**
- * Utilitário para quebra de linha de texto
- */
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
     const words = text.split(' ');
     let line = '';
@@ -49,9 +43,6 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
     ctx.fillText(line, x, y);
 }
 
-/**
- * Utilitário para abreviar números (1000 -> 1k)
- */
 function abbreviateNumber(value) {
     let newValue = value;
     if (value >= 1000) {
@@ -69,12 +60,8 @@ function abbreviateNumber(value) {
     return newValue;
 }
 
-/**
- * Função para desenhar o efeito de neve (Tema Natal)
- */
 function drawSnow(ctx, width, height) {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    // Desenha 60 flocos aleatórios
     for(let i = 0; i < 60; i++) {
         const x = Math.random() * width;
         const y = Math.random() * height;
@@ -85,48 +72,41 @@ function drawSnow(ctx, width, height) {
     }
 }
 
-async function generateProfileCard(user, member, flowData, pontoData, socialData, roleTags) {
+// Parâmetro extra: lastRepUsers (Array de users do discord)
+async function generateProfileCard(user, member, flowData, pontoData, socialData, roleTags, lastRepUsers = []) {
     const canvas = createCanvas(800, 450);
     const ctx = canvas.getContext('2d');
 
-    // --- 1. BACKGROUND (CORREÇÃO & TEMA) ---
+    // --- 1. BACKGROUND ---
     let bgLoaded = false;
-    
-    // Tenta carregar background do usuário se existir
     if (socialData.background_url && socialData.background_url.startsWith('http')) {
         try {
             const bg = await loadImage(socialData.background_url);
             ctx.drawImage(bg, 0, 0, 800, 450);
             bgLoaded = true;
-            
-            // Adiciona uma camada escura para o texto ficar legível em qualquer imagem
             ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
             ctx.fillRect(0, 0, 800, 450);
-        } catch (e) {
-            console.error("Erro ao carregar background customizado (usando padrão):", e.message);
-        }
+        } catch (e) {}
     }
 
-    // Se não carregou (ou não tem), usa o TEMA DE NATAL PADRÃO
     if (!bgLoaded) {
-        // Gradiente Natalino "Noite Mágica"
         const gradient = ctx.createLinearGradient(0, 0, 800, 450);
-        gradient.addColorStop(0, '#0f2027'); // Azul noite profundo
+        gradient.addColorStop(0, '#0f2027');
         gradient.addColorStop(0.5, '#203a43');
-        gradient.addColorStop(1, '#2c5364'); // Azul inverno
+        gradient.addColorStop(1, '#2c5364');
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, 800, 450);
-
-        // Adiciona Neve
         drawSnow(ctx, 800, 450);
-        
-        // Faixa Decorativa Vermelha no topo (Fita de presente)
         ctx.fillStyle = '#c0392b'; 
         ctx.fillRect(0, 0, 800, 8);
     }
 
-    // --- 2. PAINEL DE VIDRO (GLASSMORPHISM) ---
-    // Cria um painel central translúcido para dar destaque
+    // --- 2. MOLDURA GERAL (NOVO) ---
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; 
+    ctx.strokeRect(0, 0, 800, 450); // Borda externa
+
+    // Painel Central
     ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.lineWidth = 1;
@@ -137,7 +117,6 @@ async function generateProfileCard(user, member, flowData, pontoData, socialData
     const avatarX = 70;
     const avatarY = 70;
 
-    // Sombra do avatar
     ctx.save();
     ctx.shadowColor = '#000000';
     ctx.shadowBlur = 20;
@@ -146,11 +125,9 @@ async function generateProfileCard(user, member, flowData, pontoData, socialData
     ctx.fill();
     ctx.restore();
 
-    // Desenho do Avatar
     try {
         const avatarURL = user.displayAvatarURL({ extension: 'png', size: 256 });
         const avatar = await loadImage(avatarURL);
-        
         ctx.save();
         ctx.beginPath();
         ctx.arc(avatarX + avatarSize/2, avatarY + avatarSize/2, avatarSize/2, 0, Math.PI * 2);
@@ -158,93 +135,106 @@ async function generateProfileCard(user, member, flowData, pontoData, socialData
         ctx.clip();
         ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
         ctx.restore();
-
-        // Borda Festiva (Vermelha de Natal)
         ctx.lineWidth = 4;
         ctx.strokeStyle = '#e74c3c'; 
         ctx.beginPath();
         ctx.arc(avatarX + avatarSize/2, avatarY + avatarSize/2, avatarSize/2, 0, Math.PI * 2);
         ctx.stroke();
-    } catch (err) {
-        console.error("Erro ao desenhar avatar:", err);
-    }
+    } catch (err) {}
 
-    // --- 4. TEXTOS E DETALHES ---
+    // --- 4. TEXTOS ---
     const textStartX = 250;
     
-    // Nome do Usuário
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 38px Sans';
     ctx.fillText(user.username, textStartX, 90);
 
-    // Cargo Principal (Estilo Badge)
     const roleName = member.roles.highest.name.toUpperCase();
     const roleColor = member.displayHexColor === '#000000' ? '#2ecc71' : member.displayHexColor;
     
     ctx.font = 'bold 16px Sans';
     const roleWidth = ctx.measureText(roleName).width + 20;
-    
-    // Fundo do cargo
     ctx.fillStyle = roleColor;
     roundRect(ctx, textStartX, 108, roleWidth, 24, 6, true, false);
-    
-    // Texto do cargo
     ctx.fillStyle = '#FFFFFF';
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = 2;
     ctx.fillText(roleName, textStartX + 10, 126);
-    ctx.shadowBlur = 0; // Reset sombra
 
-    // Biografia
     ctx.fillStyle = '#DDDDDD';
     ctx.font = '18px Sans';
     const bioText = socialData.bio || "Ho Ho Ho! Este usuário ainda não definiu sua biografia de Natal.";
     wrapText(ctx, `"${bioText}"`, textStartX, 165, 480, 24);
 
-    // --- 5. ESTATÍSTICAS (CARDS PREMIUM) ---
+    // --- 5. STATS ---
     const statsY = 260;
-    const cardWidth = 155; // Menores para caberem lado a lado
+    const cardWidth = 155;
     const gap = 15;
 
     const drawStatCard = (x, icon, title, value, color) => {
-        // Fundo do card
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
         roundRect(ctx, x, statsY, cardWidth, 80, 10, true, false);
-        
-        // Barra colorida inferior
         ctx.fillStyle = color;
         ctx.fillRect(x, statsY + 76, cardWidth, 4);
-
-        // Ícone
         ctx.font = '28px Sans';
         ctx.fillText(icon, x + 15, statsY + 50);
-
-        // Valor
         ctx.fillStyle = '#FFFFFF';
         ctx.font = 'bold 22px Sans';
         ctx.fillText(value, x + 55, statsY + 35);
-
-        // Título
         ctx.fillStyle = '#AAAAAA';
         ctx.font = '12px Sans';
         ctx.fillText(title.toUpperCase(), x + 55, statsY + 58);
     };
 
     const coins = flowData?.balance || 0;
-    const timeMs = parseInt(pontoData?.total_ms || 0);
+    
+    // CORREÇÃO: Math.max para evitar números negativos
+    const rawTime = parseInt(pontoData?.total_ms || 0);
+    const timeMs = Math.max(0, rawTime); 
     const hours = Math.floor(timeMs / (1000 * 60 * 60));
+    
     const rep = socialData?.reputation || 0;
 
-    // Card 1: FlowCoins (Presente)
     drawStatCard(textStartX, '🎁', 'FlowCoins', abbreviateNumber(coins), '#f1c40f');
-    
-    // Card 2: Tempo (Árvore)
     drawStatCard(textStartX + cardWidth + gap, '🎄', 'Tempo Total', `${hours}h`, '#2ecc71');
-    
-    // Card 3: Reputação (Estrela)
     drawStatCard(textStartX + (cardWidth + gap) * 2, '⭐', 'Reputação', abbreviateNumber(rep), '#9b59b6');
 
-    // --- 6. BADGES / CONQUISTAS ---
+    // --- 6. ÚLTIMOS ELOGIOS (NOVO) ---
+    // Desenha mini avatares embaixo do card de reputação
+    if (lastRepUsers.length > 0) {
+        let repX = textStartX + (cardWidth + gap) * 2;
+        let repY = statsY + 95; // Abaixo do card de reputação
+        
+        ctx.font = '10px Sans';
+        ctx.fillStyle = '#aaa';
+        ctx.fillText("ÚLTIMOS:", repX, repY + 12);
+        
+        repX += 50;
+
+        for (const repUser of lastRepUsers) {
+            try {
+                const uAvatarURL = repUser.displayAvatarURL({ extension: 'png', size: 64 });
+                const uImg = await loadImage(uAvatarURL);
+                
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(repX + 10, repY + 7, 10, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.clip();
+                ctx.drawImage(uImg, repX, repY - 3, 20, 20);
+                ctx.restore();
+                
+                // Borda dourada
+                ctx.strokeStyle = '#f1c40f';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(repX + 10, repY + 7, 10, 0, Math.PI * 2);
+                ctx.stroke();
+
+                repX += 25;
+            } catch (e) {}
+        }
+    }
+
+    // --- 7. BADGES ---
     ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
     roundRect(ctx, 30, 365, 740, 45, 10, true, false);
     
@@ -256,7 +246,6 @@ async function generateProfileCard(user, member, flowData, pontoData, socialData
     if (roleTags && roleTags.length > 0) {
         ctx.font = '22px Sans';
         for (const tag of roleTags) {
-            // Desenha emoji da tag
             ctx.fillText(tag.tag, badgeX, 395);
             badgeX += 35;
         }
@@ -266,11 +255,14 @@ async function generateProfileCard(user, member, flowData, pontoData, socialData
         ctx.fillText("Nenhuma conquista...", badgeX, 393);
     }
 
-    // Marca d'água Natalina
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.font = '12px Sans';
+    // --- 8. FOOTER DESTACADO ---
+    ctx.shadowColor = '#e74c3c'; // Glow vermelho
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold italic 14px Sans'; // Fonte mais estilosa
     ctx.textAlign = 'right';
-    ctx.fillText("BasicFlow Christmas Edition 🎅", 750, 405);
+    ctx.fillText("BasicFlow System • Christmas Edition", 750, 405);
+    ctx.shadowBlur = 0;
 
     return canvas.toBuffer();
 }

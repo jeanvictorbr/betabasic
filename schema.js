@@ -818,7 +818,13 @@ const schema = {
         background_url: { type: 'TEXT' }, // (Opcional) Para vender background na loja depois
         bio: { type: 'VARCHAR(200)', default: 'Sem biografia definida.' }
     },
-
+// Histórico de Elogios (Reputation Logs)
+    social_rep_logs: {
+        id: { type: 'SERIAL', primaryKey: true },
+        target_id: { type: 'VARCHAR(255)', notNull: true }, // Quem recebeu
+        author_id: { type: 'VARCHAR(255)', notNull: true }, // Quem deu
+        timestamp: { type: 'TIMESTAMPTZ', default: 'NOW()' }
+    },
     // --- VOICE HUBS & TEMP CHANNELS ---
     voice_hubs: {
         guild_id: { type: 'VARCHAR(255)', primaryKey: true },
