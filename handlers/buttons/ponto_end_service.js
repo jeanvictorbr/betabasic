@@ -6,6 +6,9 @@ const { managePontoRole } = require('../../utils/pontoRoleManager.js');
 module.exports = {
     customId: 'ponto_end_service',
     async execute(interaction) {
+        // CORREÇÃO 1: Adicionado deferReply para registrar a interação imediatamente e evitar erro de timeout/duplicação
+        await interaction.deferReply({ ephemeral: true });
+
         const userId = interaction.user.id;
         const guildId = interaction.guild.id;
 
@@ -20,7 +23,8 @@ module.exports = {
         `, [userId, guildId]);
 
         if (result.rows.length === 0) {
-            return interaction.update({ 
+            // CORREÇÃO 2: Alterado de update para editReply
+            return interaction.editReply({ 
                 content: "❌ Sessão não encontrada ou já finalizada.", 
                 embeds: [], 
                 components: [] 
@@ -78,8 +82,9 @@ module.exports = {
         }
 
         // 5. Ações Finais (Logs, Cargos, Interface)
-        updatePontoLog(interaction.client, session, interaction.user);
-        managePontoRole(interaction.client, guildId, userId, 'REMOVE');
+        // Adicionei await para garantir a execução
+        await updatePontoLog(interaction.client, session, interaction.user);
+        await managePontoRole(interaction.client, guildId, userId, 'REMOVE');
 
         const finalEmbed = {
             title: "✅ Expediente Finalizado",
@@ -95,7 +100,8 @@ module.exports = {
             timestamp: now.toISOString()
         };
 
-        await interaction.editReply(dashboard);({
+        // CORREÇÃO 3: Sintaxe corrigida e usando editReply para finalizar
+        await interaction.editReply({
             embeds: [finalEmbed],
             components: [] 
         });

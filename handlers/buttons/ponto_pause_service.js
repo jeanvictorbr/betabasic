@@ -6,6 +6,9 @@ const { managePontoRole } = require('../../utils/pontoRoleManager.js'); // <--- 
 module.exports = {
     customId: 'ponto_pause_service',
     async execute(interaction) {
+        // CORREÇÃO: Adicionado deferReply para evitar erro de interação
+        await interaction.deferReply({ ephemeral: true });
+
         const userId = interaction.user.id;
         const guildId = interaction.guild.id;
 
@@ -14,9 +17,13 @@ module.exports = {
             WHERE user_id = $1 AND guild_id = $2 AND (status = 'OPEN' OR status IS NULL)
         `, [userId, guildId]);
 
-        if (result.rows.length === 0) return interaction.reply({ content: "Erro: Sessão não encontrada.", flags: 1<<6 });
+        // CORREÇÃO: Alterado reply para editReply
+        if (result.rows.length === 0) return interaction.editReply({ content: "Erro: Sessão não encontrada." }); // flags desnecessária no editReply
+        
         const session = result.rows[0];
-        if (session.is_paused) return interaction.reply({ content: "Já pausado.", flags: 1<<6 });
+        
+        // CORREÇÃO: Alterado reply para editReply
+        if (session.is_paused) return interaction.editReply({ content: "Já pausado." });
 
         const now = new Date();
 
@@ -28,10 +35,12 @@ module.exports = {
         const updatedSession = updatedResult.rows[0];
         
         // --- AÇÕES ---
-        updatePontoLog(interaction.client, updatedSession, interaction.user);
-        managePontoRole(interaction.client, guildId, userId, 'REMOVE'); // <--- REMOVER CARGO
+        await updatePontoLog(interaction.client, updatedSession, interaction.user);
+        await managePontoRole(interaction.client, guildId, userId, 'REMOVE'); // <--- REMOVER CARGO
         
         const ui = pontoDashboard(updatedSession, interaction.member);
-        await interaction.editReply(dashboard);
+        
+        // CORREÇÃO: Variável corrigida de 'dashboard' para 'ui' (definida acima) e uso de editReply
+        await interaction.editReply(ui);
     }
 };
