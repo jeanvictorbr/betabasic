@@ -1,18 +1,16 @@
 const { createCanvas, loadImage, registerFont } = require('canvas');
 const path = require('path');
 
-// Tenta registrar a fonte (opcional)
 try {
     registerFont(path.join(__dirname, '../assets/fonts/Poppins-Bold.ttf'), { family: 'Poppins', weight: 'bold' });
     registerFont(path.join(__dirname, '../assets/fonts/Poppins-Regular.ttf'), { family: 'Poppins', weight: 'regular' });
 } catch (e) { }
 
 const ICONS = {
-    // Novos ícones PNG bonitos
-    ROLES: 'https://cdn-icons-png.flaticon.com/512/10628/10628960.png', // Ícone de Crachá/Cargos
-    REP: 'https://cdn-icons-png.flaticon.com/512/10479/10479862.png',  // Estrela 3D
-    TIME: 'https://cdn-icons-png.flaticon.com/512/10479/10479929.png', // Relógio 3D
-    HEART: 'https://cdn-icons-png.flaticon.com/512/9466/9466004.png'   // Coração Fofo
+    ROLES: 'https://cdn-icons-png.flaticon.com/512/10628/10628960.png',
+    REP: 'https://cdn-icons-png.flaticon.com/512/10479/10479862.png',
+    TIME: 'https://cdn-icons-png.flaticon.com/512/10479/10479929.png',
+    HEART: 'https://cdn-icons-png.flaticon.com/512/9466/9466004.png'
 };
 
 function formatTime(ms) {
@@ -21,7 +19,6 @@ function formatTime(ms) {
     return `${hours}h`; 
 }
 
-// Helper para desenhar retângulos arredondados
 function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
     if (typeof stroke === 'undefined') stroke = true;
     if (typeof radius === 'undefined') radius = 5;
@@ -91,7 +88,6 @@ async function generateProfileCard(targetUser, memberData) {
     }
     ctx.restore();
     
-    // Borda Avatar
     ctx.strokeStyle = memberData.highestRoleColor || '#ffffff';
     ctx.lineWidth = 6;
     ctx.beginPath();
@@ -113,24 +109,23 @@ async function generateProfileCard(targetUser, memberData) {
     ctx.fillText(roleName.toUpperCase(), roleX + (roleWidth / 2), roleY + 21);
     ctx.textAlign = 'left';
 
-    // Data de entrada
+    // Membro Desde
     const joinedDate = memberData.joinedAt ? new Date(memberData.joinedAt).toLocaleDateString('pt-BR') : '??/??';
-    ctx.fillStyle = '#888';
+    ctx.fillStyle = '#aaaaaa';
     ctx.font = '14px "Poppins", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`Desde: ${joinedDate}`, avatarX + (avatarSize / 2), roleY + 55);
+    // Alterado para "Membro desde"
+    ctx.fillText(`Membro desde: ${joinedDate}`, avatarX + (avatarSize / 2), roleY + 55);
     ctx.textAlign = 'left';
 
     // --- 4. TEXTOS (Cabeçalho) ---
     const textStartX = 280;
     
-    // Nome Display
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 42px "Poppins", sans-serif';
     const displayName = targetUser.globalName || targetUser.username;
     ctx.fillText(displayName, textStartX, 100);
 
-    // Username (@)
     ctx.fillStyle = '#aaaaaa';
     ctx.font = '24px "Poppins", sans-serif';
     ctx.fillText(`@${targetUser.username}`, textStartX, 135);
@@ -155,9 +150,9 @@ async function generateProfileCard(targetUser, memberData) {
     ctx.fillStyle = '#cccccc';
     ctx.font = 'italic 18px "Poppins", sans-serif';
     const bio = memberData.social?.bio || "Digite /social bio para alterar esta mensagem...";
-    wrapText(ctx, bio, textStartX, 180, 500, 25);
+    wrapText(ctx, bio, textStartX, 180, 500, 25, 3); // Limite de 3 linhas para bio
 
-    // --- 5. STATS (Substituindo Saldo por Cargos) ---
+    // --- 5. STATS (Labels Alterados) ---
     const statsY = 300;
     const boxWidth = 160;
     const spacing = 20;
@@ -168,67 +163,53 @@ async function generateProfileCard(targetUser, memberData) {
 
     // Box 1: Cargos
     drawModernStatBox(ctx, iconRole, 'Cargos', `${memberData.roleCount || 0}`, textStartX, statsY, '#9b59b6');
-    // Box 2: Reputação
-    drawModernStatBox(ctx, iconRep, 'Reputação', `${memberData.social?.reputation || 0}`, textStartX + boxWidth + spacing, statsY, '#f1c40f');
-    // Box 3: Tempo Online
-    drawModernStatBox(ctx, iconTime, 'Online', formatTime(memberData.ponto?.total_ms || 0), textStartX + (boxWidth + spacing) * 2, statsY, '#3498db');
+    // Box 2: Elogios (Antes era Reputação)
+    drawModernStatBox(ctx, iconRep, 'Elogios', `${memberData.social?.reputation || 0}`, textStartX + boxWidth + spacing, statsY, '#f1c40f');
+    // Box 3: Tempo de Ponto (Antes era Online)
+    drawModernStatBox(ctx, iconTime, 'Tempo de Ponto', formatTime(memberData.ponto?.total_ms || 0), textStartX + (boxWidth + spacing) * 2, statsY, '#3498db');
 
-    // --- 6. ÚLTIMO ELOGIO (Novo Layout Fofo) ---
+    // --- 6. ÚLTIMO ELOGIO (Com Texto) ---
     const badgeAreaY = 400;
     
     // Fundo da área
     ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-    roundRect(ctx, textStartX, badgeAreaY, 520, 60, 15, true, false);
+    roundRect(ctx, textStartX, badgeAreaY, 520, 75, 15, true, false); // Aumentei altura pra caber texto
 
     const iconHeart = await loadImage(ICONS.HEART).catch(()=>null);
-    
-    // Desenha o Coração
-    if (iconHeart) {
-        ctx.drawImage(iconHeart, textStartX + 15, badgeAreaY + 10, 40, 40);
-    }
+    if (iconHeart) ctx.drawImage(iconHeart, textStartX + 15, badgeAreaY + 18, 40, 40);
 
-    // Título
-    ctx.fillStyle = '#ff6b81'; // Cor rosa/avermelhada
-    ctx.font = 'bold 12px "Poppins", sans-serif';
-    ctx.fillText("ÚLTIMO ELOGIO DE:", textStartX + 70, badgeAreaY + 20);
-
-    // Dados do Último Elogio
-    const lastRep = memberData.lastRepUser; // Objeto { user: UserObject, date: Date }
+    const lastRep = memberData.lastRepUser; // { user, date, message }
     
     if (lastRep && lastRep.user) {
-        // Avatar de quem enviou (Pequeno círculo)
-        const senderAvatarSize = 30;
         const senderX = textStartX + 70;
-        const senderY = badgeAreaY + 26;
+        const senderY = badgeAreaY + 22;
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(senderX + senderAvatarSize/2, senderY + senderAvatarSize/2, senderAvatarSize/2, 0, Math.PI*2);
-        ctx.clip();
-        try {
-            const sAvatar = await loadImage(lastRep.user.displayAvatarURL({ extension: 'png' }));
-            ctx.drawImage(sAvatar, senderX, senderY, senderAvatarSize, senderAvatarSize);
-        } catch(e) {
-            ctx.fillStyle = '#fff';
-            ctx.fill();
-        }
-        ctx.restore();
-
-        // Nome e Data
-        ctx.fillStyle = '#ffffff';
+        // "De: @Fulano"
+        ctx.fillStyle = '#ff6b81';
         ctx.font = 'bold 16px "Poppins", sans-serif';
-        ctx.fillText(lastRep.user.username, senderX + 40, senderY + 20);
-        
-        ctx.fillStyle = '#777';
+        const fromText = `De: @${lastRep.user.username}`;
+        ctx.fillText(fromText, senderX, senderY);
+
+        // Data pequena ao lado
+        ctx.fillStyle = '#666';
         ctx.font = '12px "Poppins", sans-serif';
         const dateStr = new Date(lastRep.date).toLocaleDateString('pt-BR');
-        ctx.fillText(` em ${dateStr}`, senderX + 40 + ctx.measureText(lastRep.user.username).width + 5, senderY + 20);
+        const fromWidth = ctx.measureText(fromText).width;
+        ctx.fillText(` • ${dateStr}`, senderX + fromWidth, senderY);
+
+        // Mensagem do Elogio (Entre aspas e com quebra de linha)
+        ctx.fillStyle = '#dddddd'; // Cor do texto do elogio
+        ctx.font = 'italic 15px "Poppins", sans-serif';
+        
+        const messageText = lastRep.message ? `"${lastRep.message}"` : '"Enviou um elogio!"';
+        // Envolve o texto em até 2 linhas dentro do box
+        wrapText(ctx, messageText, senderX, senderY + 22, 430, 20, 2); 
 
     } else {
         // Se ninguém elogiou ainda
         ctx.fillStyle = '#888';
-        ctx.font = 'italic 14px "Poppins", sans-serif';
-        ctx.fillText("Ninguém enviou amor ainda... 😢", textStartX + 70, badgeAreaY + 40);
+        ctx.font = 'italic 16px "Poppins", sans-serif';
+        ctx.fillText("Nenhum elogio recebido ainda... seja o primeiro!", textStartX + 70, badgeAreaY + 45);
     }
 
     return canvas.toBuffer();
@@ -254,27 +235,31 @@ function drawModernStatBox(ctx, icon, label, value, x, y, color) {
     ctx.fillText(value, x + 65, y + 35);
 
     ctx.fillStyle = '#aaa';
-    ctx.font = '11px "Poppins", sans-serif';
+    ctx.font = '11px "Poppins", sans-serif'; // Fonte menor pro label caber
     ctx.fillText(label.toUpperCase(), x + 65, y + 55);
 }
 
-function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+// Função wrapText melhorada com limite de linhas
+function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 10) {
     const words = text.split(' ');
     let line = '';
     let linesDrawn = 0;
+
     for(let n = 0; n < words.length; n++) {
         const testLine = line + words[n] + ' ';
         const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && n > 0) {
-            if(linesDrawn < 3) {
-                ctx.fillText(line, x, y);
-                line = words[n] + ' ';
-                y += lineHeight;
-                linesDrawn++;
-            } else {
-                line += "...";
-                break;
+        const testWidth = metrics.width;
+        
+        if (testWidth > maxWidth && n > 0) {
+            if (linesDrawn >= maxLines - 1) {
+                // Última linha permitida, adiciona ... e para
+                ctx.fillText(line + "...", x, y);
+                return;
             }
+            ctx.fillText(line, x, y);
+            line = words[n] + ' ';
+            y += lineHeight;
+            linesDrawn++;
         } else {
             line = testLine;
         }
