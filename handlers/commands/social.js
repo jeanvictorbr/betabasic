@@ -20,8 +20,8 @@ module.exports = {
                 const [pontoRes, socialRes, repLogsRes] = await Promise.all([
                     db.query('SELECT total_ms FROM ponto_leaderboard WHERE user_id = $1 AND guild_id = $2', [targetUser.id, interaction.guild.id]),
                     db.query('SELECT * FROM social_users WHERE user_id = $1', [targetUser.id]),
-                    // Pega o último elogio para mostrar no card
-                    db.query('SELECT author_id, timestamp FROM social_rep_logs WHERE target_id = $1 ORDER BY timestamp DESC LIMIT 1', [targetUser.id])
+                    // TENTA buscar a mensagem. Se der erro de coluna não existente, vai cair no catch
+                    db.query('SELECT author_id, timestamp, message FROM social_rep_logs WHERE target_id = $1 ORDER BY timestamp DESC LIMIT 1', [targetUser.id])
                 ]);
 
                 // 2. Processa o "Último Elogio"
@@ -31,11 +31,10 @@ module.exports = {
                         const authorUser = await interaction.client.users.fetch(repLogsRes.rows[0].author_id);
                         lastRepUserObj = {
                             user: authorUser,
-                            date: repLogsRes.rows[0].timestamp
+                            date: repLogsRes.rows[0].timestamp,
+                            message: repLogsRes.rows[0].message // Passa a mensagem para o gerador
                         };
-                    } catch (e) {
-                        // Usuário saiu ou não existe mais
-                    }
+                    } catch (e) {}
                 }
 
                 // 3. Prepara Dados para o Gerador
@@ -43,16 +42,12 @@ module.exports = {
                     ponto: pontoRes.rows[0] || { total_ms: 0 },
                     social: socialRes.rows[0] || { reputation: 0, bio: 'Sem biografia...', background_url: null },
                     
-                    // Dados Visuais
                     joinedAt: targetMember.joinedAt,
                     highestRoleName: targetMember.roles.highest.name,
                     highestRoleColor: targetMember.roles.highest.hexColor,
                     guildIconUrl: interaction.guild.iconURL({ extension: 'png', size: 256 }),
-                    
-                    // Quantidade de Cargos (Substituindo Saldo)
                     roleCount: targetMember.roles.cache.size - 1,
                     
-                    // Dados do Último Elogio
                     lastRepUser: lastRepUserObj
                 };
 
@@ -67,7 +62,7 @@ module.exports = {
                         .setLabel('Elogiar (+1 Rep)')
                         .setEmoji('💖')
                         .setStyle(ButtonStyle.Success)
-                        .setDisabled(targetUser.id === interaction.user.id), // Ainda bloqueia auto-elogio (opcional)
+                        .setDisabled(targetUser.id === interaction.user.id),
                     new ButtonBuilder()
                         .setCustomId('ver_elogios')
                         .setLabel('Histórico')
@@ -81,37 +76,34 @@ module.exports = {
                     components: [rowMain]
                 });
 
-                // 6. Coletor de Botões
+                // 6. Coletor
                 const collector = msg.createMessageComponentCollector({ time: 300000 });
 
                 collector.on('collect', async i => {
-                    // --- BOTÃO ELOGIAR (SEM LIMITES) ---
                     if (i.customId === 'elogiar') {
                         if (targetUser.id === i.user.id) return i.reply({ content: "❌ Amor próprio é tudo, mas aqui não conta!", ephemeral: true });
                         
-                        // REMOVIDO: A verificação de Cooldown (Data)
-                        
                         try {
-                            // Salva no DB
+                            // Salva elogio padrão (via botão não tem como escrever mensagem ainda)
                             await db.query(`INSERT INTO social_users (user_id, reputation) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET reputation = social_users.reputation + 1`, [targetUser.id]);
-                            await db.query(`INSERT INTO social_rep_logs (target_id, author_id, timestamp) VALUES ($1, $2, NOW())`, [targetUser.id, i.user.id]);
-                            // Atualizamos o last_rep_given apenas para registro, mas sem bloquear
+                            // Mensagem padrão para clique no botão
+                            const defaultMsg = "Gostei do seu perfil! (Botão)";
+                            await db.query(`INSERT INTO social_rep_logs (target_id, author_id, timestamp, message) VALUES ($1, $2, NOW(), $3)`, [targetUser.id, i.user.id, defaultMsg]);
                             await db.query(`INSERT INTO social_users (user_id, last_rep_given) VALUES ($1, NOW()) ON CONFLICT (user_id) DO UPDATE SET last_rep_given = NOW()`, [i.user.id]);
 
-                            await i.reply({ content: `💖 Você enviou um elogio para **${targetUser.username}**!`, ephemeral: true });
+                            await i.reply({ content: `💖 Elogio enviado para **${targetUser.username}**!`, ephemeral: true });
                         } catch (err) {
                             console.error(err);
-                            await i.reply({ content: "❌ Erro ao salvar elogio.", ephemeral: true });
+                            await i.reply({ content: "❌ Erro. (Verifique se a coluna 'message' existe na tabela social_rep_logs)", ephemeral: true });
                         }
                     }
 
-                    // --- BOTÃO HISTÓRICO ---
                     if (i.customId === 'ver_elogios' || i.customId === 'voltar_perfil') {
                         if (i.customId === 'voltar_perfil') {
                             await i.update({ files: [attachment], embeds: [], components: [rowMain] });
                         } else {
-                            // Busca histórico paginado
-                            const fullLogs = await db.query('SELECT author_id, timestamp FROM social_rep_logs WHERE target_id = $1 ORDER BY timestamp DESC LIMIT 50', [targetUser.id]);
+                            // Busca histórico com mensagens
+                            const fullLogs = await db.query('SELECT author_id, timestamp, message FROM social_rep_logs WHERE target_id = $1 ORDER BY timestamp DESC LIMIT 50', [targetUser.id]);
                             await handlePagination(i, fullLogs.rows, targetUser);
                         }
                     }
@@ -119,41 +111,45 @@ module.exports = {
 
             } catch (err) {
                 console.error(err);
-                if (!interaction.replied) await interaction.editReply("❌ Erro ao gerar perfil.");
+                if (!interaction.replied) await interaction.editReply("❌ Erro ao gerar perfil. Verifique se o banco de dados tem a coluna 'message'.");
             }
         }
 
         // --- SUBCOMANDO: BIO ---
         if (subcommand === 'bio') {
             const bioText = interaction.options.getString('texto');
-            if (bioText.length > 150) return interaction.reply({ content: "❌ A bio deve ter no máximo 150 caracteres.", ephemeral: true });
+            if (bioText.length > 150) return interaction.reply({ content: "❌ Máximo 150 caracteres.", ephemeral: true });
 
             await db.query(`INSERT INTO social_users (user_id, bio) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET bio = $2`, [interaction.user.id, bioText]);
             return interaction.reply({ content: `✅ Bio atualizada!\n> "${bioText}"`, ephemeral: true });
         }
 
-        // --- SUBCOMANDO: ELOGIAR (DIRETO) - SEM LIMITES ---
+        // --- SUBCOMANDO: ELOGIAR (Direto) ---
         if (subcommand === 'elogiar') {
             const targetUser = interaction.options.getUser('usuario');
+            // Tenta pegar a mensagem opcional do comando. Se não tiver, usa padrão.
+            const message = interaction.options.getString('mensagem') || interaction.options.getString('motivo') || "Um elogio para você!"; 
+
             if (targetUser.id === interaction.user.id) return interaction.reply({ content: "❌ Você não pode se elogiar.", ephemeral: true });
             
-            // REMOVIDO: A verificação de Cooldown aqui também
-
             try {
                 await db.query(`INSERT INTO social_users (user_id, reputation) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET reputation = social_users.reputation + 1`, [targetUser.id]);
-                await db.query(`INSERT INTO social_rep_logs (target_id, author_id, timestamp) VALUES ($1, $2, NOW())`, [targetUser.id, interaction.user.id]);
+                
+                // INSERT COM MENSAGEM
+                await db.query(`INSERT INTO social_rep_logs (target_id, author_id, timestamp, message) VALUES ($1, $2, NOW(), $3)`, [targetUser.id, interaction.user.id, message]);
+                
                 await db.query(`INSERT INTO social_users (user_id, last_rep_given) VALUES ($1, NOW()) ON CONFLICT (user_id) DO UPDATE SET last_rep_given = NOW()`, [interaction.user.id]);
 
-                return interaction.reply({ content: `🌟 Elogio enviado para **${targetUser.username}**!`, ephemeral: true });
+                return interaction.reply({ content: `🌟 Elogio enviado para **${targetUser.username}**!\n> *"${message}"*`, ephemeral: true });
             } catch (err) {
                 console.error(err);
-                return interaction.reply({ content: "❌ Erro ao processar.", ephemeral: true });
+                return interaction.reply({ content: "❌ Erro ao salvar. Verifique se a coluna 'message' existe no banco.", ephemeral: true });
             }
         }
     }
 };
 
-// --- FUNÇÃO DE PAGINAÇÃO (Mantida igual) ---
+// --- FUNÇÃO DE PAGINAÇÃO ---
 async function handlePagination(interaction, logs, targetUser) {
     const ITEMS_PER_PAGE = 5;
     let page = 0;
@@ -174,7 +170,8 @@ async function handlePagination(interaction, logs, targetUser) {
         } else {
             const description = slicedLogs.map(log => {
                 const date = new Date(log.timestamp).toLocaleDateString('pt-BR');
-                return `💖 De <@${log.author_id}> em \`${date}\``;
+                const msg = log.message ? `"${log.message}"` : '"Sem mensagem"';
+                return `💖 De <@${log.author_id}> em \`${date}\`\n💬 ${msg}`;
             }).join('\n────────────────\n');
             embed.setDescription(description);
         }

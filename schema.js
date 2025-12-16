@@ -823,7 +823,8 @@ const schema = {
         id: { type: 'SERIAL', primaryKey: true },
         target_id: { type: 'VARCHAR(255)', notNull: true }, // Quem recebeu
         author_id: { type: 'VARCHAR(255)', notNull: true }, // Quem deu
-        timestamp: { type: 'TIMESTAMPTZ', default: 'NOW()' }
+        timestamp: { type: 'TIMESTAMPTZ', default: 'NOW()' },
+        message: 'TEXT' // <--- A coluna nova que faltava
     },
     // --- VOICE HUBS & TEMP CHANNELS ---
     voice_hubs: {
