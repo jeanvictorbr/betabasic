@@ -1,13 +1,12 @@
 const db = require('../../database.js');
 const pontoDashboard = require('../../ui/pontoDashboardPessoalV2.js');
 const { updatePontoLog } = require('../../utils/pontoLogManager.js');
-const { managePontoRole } = require('../../utils/pontoRoleManager.js'); // <--- NOVO
+const { managePontoRole } = require('../../utils/pontoRoleManager.js');
 
 module.exports = {
     customId: 'ponto_pause_service',
     async execute(interaction) {
-        // CORREÇÃO: Adicionado deferReply para evitar erro de interação
-        await interaction.deferReply({ ephemeral: true });
+        // REMOVIDO: interaction.deferReply (o index.js já fez isso)
 
         const userId = interaction.user.id;
         const guildId = interaction.guild.id;
@@ -17,12 +16,12 @@ module.exports = {
             WHERE user_id = $1 AND guild_id = $2 AND (status = 'OPEN' OR status IS NULL)
         `, [userId, guildId]);
 
-        // CORREÇÃO: Alterado reply para editReply
-        if (result.rows.length === 0) return interaction.editReply({ content: "Erro: Sessão não encontrada." }); // flags desnecessária no editReply
+        // CORREÇÃO: Usar editReply
+        if (result.rows.length === 0) return interaction.editReply({ content: "Erro: Sessão não encontrada." });
         
         const session = result.rows[0];
         
-        // CORREÇÃO: Alterado reply para editReply
+        // CORREÇÃO: Usar editReply
         if (session.is_paused) return interaction.editReply({ content: "Já pausado." });
 
         const now = new Date();
@@ -36,11 +35,11 @@ module.exports = {
         
         // --- AÇÕES ---
         await updatePontoLog(interaction.client, updatedSession, interaction.user);
-        await managePontoRole(interaction.client, guildId, userId, 'REMOVE'); // <--- REMOVER CARGO
+        await managePontoRole(interaction.client, guildId, userId, 'REMOVE');
         
         const ui = pontoDashboard(updatedSession, interaction.member);
         
-        // CORREÇÃO: Variável corrigida de 'dashboard' para 'ui' (definida acima) e uso de editReply
+        // CORREÇÃO: Usar editReply e corrigir variável dashboard -> ui
         await interaction.editReply(ui);
     }
 };

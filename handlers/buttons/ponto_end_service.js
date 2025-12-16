@@ -6,13 +6,12 @@ const { managePontoRole } = require('../../utils/pontoRoleManager.js');
 module.exports = {
     customId: 'ponto_end_service',
     async execute(interaction) {
-        // CORREÇÃO 1: Adicionado deferReply para registrar a interação imediatamente e evitar erro de timeout/duplicação
-        await interaction.deferReply({ ephemeral: true });
+        // REMOVIDO: interaction.deferReply (o index.js já fez isso)
 
         const userId = interaction.user.id;
         const guildId = interaction.guild.id;
 
-        // 1. Busca a sessão ativa (mesmo se estiver bugada/sem status)
+        // 1. Busca a sessão ativa
         const result = await db.query(`
             SELECT * FROM ponto_sessions 
             WHERE user_id = $1 
@@ -23,7 +22,7 @@ module.exports = {
         `, [userId, guildId]);
 
         if (result.rows.length === 0) {
-            // CORREÇÃO 2: Alterado de update para editReply
+            // CORREÇÃO: Usar editReply
             return interaction.editReply({ 
                 content: "❌ Sessão não encontrada ou já finalizada.", 
                 embeds: [], 
@@ -35,19 +34,17 @@ module.exports = {
         const now = new Date();
         const nowMs = now.getTime();
 
-        // 2. Cálculo Final de Pausa (se fechou enquanto estava pausado)
+        // 2. Cálculo Final de Pausa
         let finalTotalPause = parseInt(session.total_paused_ms || 0);
         
-        // Verifica se estava pausado e se last_pause_time é válido
         if (session.is_paused && session.last_pause_time) {
             const lastPauseMs = new Date(session.last_pause_time).getTime();
-            // Só soma se lastPauseMs for válido e menor que agora
             if (!isNaN(lastPauseMs) && lastPauseMs > 0 && lastPauseMs < nowMs) {
                 finalTotalPause += (nowMs - lastPauseMs);
             }
         }
 
-        // 3. Atualiza a Sessão no Banco (Fecha ela)
+        // 3. Atualiza a Sessão no Banco
         await db.query(`
             UPDATE ponto_sessions 
             SET status = 'CLOSED', 
@@ -57,7 +54,7 @@ module.exports = {
             WHERE session_id = $3
         `, [now, finalTotalPause, session.session_id]);
 
-        // 4. Atualiza objeto local para cálculos
+        // 4. Atualiza objeto local
         session.end_time = now;
         session.status = 'CLOSED';
         session.total_paused_ms = finalTotalPause;
@@ -65,11 +62,9 @@ module.exports = {
 
         // Calcula o tempo líquido final
         const timeData = calculateSessionTime(session);
-        const durationMs = timeData.durationMs; // Tempo exato em milissegundos
+        const durationMs = timeData.durationMs;
 
-        // ---------------------------------------------------------
-        // 🚀 A CORREÇÃO DO RANKING ESTÁ AQUI (UPSERT)
-        // ---------------------------------------------------------
+        // Ranking (UPSERT)
         if (durationMs > 0) {
             await db.query(`
                 INSERT INTO ponto_leaderboard (guild_id, user_id, total_ms)
@@ -81,10 +76,9 @@ module.exports = {
             console.log(`[Ranking] Adicionado ${timeData.formatted} para ${userId}`);
         }
 
-        // 5. Ações Finais (Logs, Cargos, Interface)
-        // Adicionei await para garantir a execução
-        await updatePontoLog(interaction.client, session, interaction.user);
-        await managePontoRole(interaction.client, guildId, userId, 'REMOVE');
+        // 5. Ações Finais
+        updatePontoLog(interaction.client, session, interaction.user);
+        managePontoRole(interaction.client, guildId, userId, 'REMOVE');
 
         const finalEmbed = {
             title: "✅ Expediente Finalizado",
@@ -100,7 +94,7 @@ module.exports = {
             timestamp: now.toISOString()
         };
 
-        // CORREÇÃO 3: Sintaxe corrigida e usando editReply para finalizar
+        // CORREÇÃO: Usar editReply e corrigir sintaxe
         await interaction.editReply({
             embeds: [finalEmbed],
             components: [] 

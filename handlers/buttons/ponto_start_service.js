@@ -1,13 +1,12 @@
 const db = require('../../database.js');
 const pontoDashboard = require('../../ui/pontoDashboardPessoalV2.js');
 const { updatePontoLog } = require('../../utils/pontoLogManager.js');
-const { managePontoRole } = require('../../utils/pontoRoleManager.js'); // <--- NOVO
+const { managePontoRole } = require('../../utils/pontoRoleManager.js');
 
 module.exports = {
     customId: 'ponto_start_service',
     async execute(interaction) {
-        // CORREÇÃO: Adicionado deferReply para evitar erro de interação
-        await interaction.deferReply({ ephemeral: true });
+        // REMOVIDO: interaction.deferReply (o index.js já fez isso)
 
         const userId = interaction.user.id;
         const guildId = interaction.guild.id;
@@ -19,7 +18,7 @@ module.exports = {
         `, [userId, guildId]);
 
         if (check.rows.length > 0) {
-            // CORREÇÃO: Alterado reply para editReply
+            // CORREÇÃO: Usar editReply
             return interaction.editReply(pontoDashboard(check.rows[0], interaction.member));
         }
 
@@ -33,11 +32,11 @@ module.exports = {
 
         // --- AÇÕES ---
         await updatePontoLog(interaction.client, session, interaction.user);
-        await managePontoRole(interaction.client, guildId, userId, 'ADD'); // <--- DAR CARGO
+        await managePontoRole(interaction.client, guildId, userId, 'ADD');
 
         const dashboard = pontoDashboard(session, interaction.member);
         
-        // CORREÇÃO: Uso de editReply
+        // CORREÇÃO: Usar editReply
         await interaction.editReply(dashboard);
     }
 };
