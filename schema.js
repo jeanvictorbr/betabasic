@@ -810,6 +810,14 @@ const schema = {
         guild_id: { type: 'VARCHAR(255)', notNull: true },
         used_at: { type: 'TIMESTAMP WITH TIME ZONE', default: 'NOW()' }
     },
+    // --- SOCIAL CARD (PERFIL & REPUTAÇÃO) ---
+    social_users: {
+        user_id: { type: 'VARCHAR(255)', primaryKey: true },
+        reputation: { type: 'INTEGER', default: 0 },
+        last_rep_given: { type: 'TIMESTAMPTZ' }, // Para cooldown de elogiar
+        background_url: { type: 'TEXT' }, // (Opcional) Para vender background na loja depois
+        bio: { type: 'VARCHAR(200)', default: 'Sem biografia definida.' }
+    },
 
     // --- VOICE HUBS & TEMP CHANNELS ---
     voice_hubs: {
