@@ -95,7 +95,7 @@ module.exports = {
             timestamp: now.toISOString()
         };
 
-        await interaction.update({
+        await interaction.editReply(dashboard);({
             embeds: [finalEmbed],
             components: [] 
         });

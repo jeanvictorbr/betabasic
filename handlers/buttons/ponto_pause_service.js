@@ -32,6 +32,6 @@ module.exports = {
         managePontoRole(interaction.client, guildId, userId, 'REMOVE'); // <--- REMOVER CARGO
         
         const ui = pontoDashboard(updatedSession, interaction.member);
-        await interaction.update(ui);
+        await interaction.editReply(dashboard);
     }
 };

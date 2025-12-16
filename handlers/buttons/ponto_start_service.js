@@ -32,6 +32,6 @@ module.exports = {
         managePontoRole(interaction.client, guildId, userId, 'ADD'); // <--- DAR CARGO
 
         const dashboard = pontoDashboard(session, interaction.member);
-        await interaction.reply(dashboard);
+        await interaction.editReply(dashboard);
     }
 };
