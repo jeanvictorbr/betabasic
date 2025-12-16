@@ -3,26 +3,21 @@ const { SlashCommandBuilder } = require('discord.js');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('social')
-        .setDescription('Gerencie seu perfil social e reputação.')
+        .setDescription('Sistema de identidade, reputação e perfil.')
         .addSubcommand(sub => 
             sub.setName('perfil')
-               .setDescription('Exibe o seu cartão de perfil ou de outro usuário.')
-               .addUserOption(opt => opt.setName('usuario').setDescription('Usuário alvo')))
+               .setDescription('Exibe o cartão de perfil natalino (Seu ou de outro usuário).')
+               .addUserOption(opt => opt.setName('usuario').setDescription('Usuário alvo (Opcional)')))
         .addSubcommand(sub => 
             sub.setName('elogiar')
-               .setDescription('Dê reputação para alguém (1x a cada 24h).')
+               .setDescription('Dê um ponto de reputação para alguém (1x a cada 24h).')
                .addUserOption(opt => opt.setName('usuario').setDescription('Quem merece o elogio?').setRequired(true)))
         .addSubcommand(sub => 
             sub.setName('bio')
-               .setDescription('Defina a mensagem que aparece no seu perfil.')
-               .addStringOption(opt => opt.setName('texto').setDescription('Sua biografia (Max 150 caracteres)').setRequired(true)))
-        .addSubcommand(sub => 
-            sub.setName('background')
-               .setDescription('Defina a imagem de fundo do seu perfil.')
-               .addStringOption(opt => opt.setName('url').setDescription('Link direto da imagem (JPG/PNG)').setRequired(true))),
+               .setDescription('Defina a mensagem personalizada do seu perfil.')
+               .addStringOption(opt => opt.setName('texto').setDescription('Sua biografia (Max 150 caracteres)').setRequired(true))),
     
     async execute(interaction) {
-        // O roteamento para o handler será feito pelo index.js procurando 'social'
-        // Mas a lógica estará no handler/commands/social.js
+        // A lógica é roteada pelo index.js para handlers/commands/social.js
     },
 };

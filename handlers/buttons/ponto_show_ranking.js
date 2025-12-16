@@ -1,48 +1,63 @@
-// handlers/buttons/ponto_show_ranking.js
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../../database.js');
-const { formatDuration } = require('../../utils/formatDuration.js');
-
-const ITEMS_PER_PAGE = 10;
 
 module.exports = {
     customId: 'ponto_show_ranking',
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        const guildId = interaction.guild.id;
 
-        const page = 0;
-        const offset = page * ITEMS_PER_PAGE;
+        // Busca o TOP 10 ordenado por total_ms
+        const result = await db.query(`
+            SELECT user_id, total_ms 
+            FROM ponto_leaderboard 
+            WHERE guild_id = $1 
+            ORDER BY total_ms DESC 
+            LIMIT 10
+        `, [guildId]);
 
-        const leaderboardData = await db.query(
-            `SELECT user_id, total_ms FROM ponto_leaderboard WHERE guild_id = $1 ORDER BY total_ms DESC LIMIT $2 OFFSET $3`,
-            [interaction.guild.id, ITEMS_PER_PAGE, offset]
-        );
-        const totalCount = (await db.query('SELECT COUNT(*) FROM ponto_leaderboard WHERE guild_id = $1', [interaction.guild.id])).rows[0].count;
-        const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
-
-        const embed = new EmbedBuilder()
-            .setColor('#FFD700') // Dourado
-            .setTitle('🏆 Ranking de Ponto')
-            .setThumbnail(interaction.guild.iconURL())
-            .setFooter({ text: `Página ${page + 1} de ${totalPages || 1}` });
-
-        if (leaderboardData.rows.length === 0) {
-            embed.setDescription('Ninguém bateu o ponto ainda.');
-        } else {
-            const rankingList = await Promise.all(leaderboardData.rows.map(async (row, index) => {
-                const member = await interaction.guild.members.fetch(row.user_id).catch(() => null);
-                const position = offset + index + 1;
-                // --- CORREÇÃO: Number(row.total_ms) garante que a string do DB vire número
-                return `**${position}.** ${member || '`Usuário Saiu`'} - \`${formatDuration(Number(row.total_ms))}\``;
-            }));
-            embed.setDescription(rankingList.join('\n'));
+        if (result.rows.length === 0) {
+            return interaction.reply({ 
+                content: "❌ O Ranking ainda está vazio. Comecem a bater ponto!", 
+                flags: 1 << 6 
+            });
         }
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`ranking_page_0`).setLabel('<').setStyle(ButtonStyle.Primary).setDisabled(true),
-            new ButtonBuilder().setCustomId(`ranking_page_1`).setLabel('>').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
-        );
+        // Função auxiliar para formatar MS em Texto Bonito
+        const formatMs = (ms) => {
+            const seconds = Math.floor((ms / 1000) % 60);
+            const minutes = Math.floor((ms / (1000 * 60)) % 60);
+            const hours = Math.floor((ms / (1000 * 60 * 60)));
+            return `${hours}h ${minutes}m`;
+        };
 
-        await interaction.editReply({ embeds: [embed], components: [row] });
+        let rankString = "";
+        let position = 1;
+
+        // Medalhas para os top 3
+        const medals = ["🥇", "🥈", "🥉"];
+
+        for (const row of result.rows) {
+            const medal = medals[position - 1] || `**${position}º**`;
+            const timeFormatted = formatMs(parseInt(row.total_ms));
+            
+            // Tenta pegar o nome do usuário cacheado ou menção
+            rankString += `${medal} <@${row.user_id}> — \`${timeFormatted}\`\n`;
+            position++;
+        }
+
+        const embed = {
+            title: "🏆 Ranking de Atividade (Ponto)",
+            description: rankString,
+            color: 0xFFD700, // Dourado
+            footer: {
+                text: "BasicFlow Ranking • Atualizado em tempo real",
+                icon_url: interaction.guild.iconURL()
+            },
+            timestamp: new Date().toISOString()
+        };
+
+        await interaction.reply({
+            embeds: [embed],
+            flags: 1 << 6 // Ephemeral (só quem clicou vê)
+        });
     }
 };
