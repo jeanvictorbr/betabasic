@@ -1,135 +1,208 @@
 const { createCanvas, loadImage, registerFont } = require('canvas');
 const path = require('path');
-const { formatDuration } = require('./formatDuration.js'); // Usando seu utilitário existente
 
-// Tenta registrar fonte se tiver, senão usa padrão
-try {
-    // registerFont(path.join(__dirname, '../assets/fonts/Roboto-Bold.ttf'), { family: 'Roboto' });
-} catch (e) {
-    console.log("Fonte personalizada não encontrada, usando padrão do sistema.");
+// Função auxiliar para quebrar texto (Word Wrap)
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    const words = text.split(' ');
+    let line = '';
+
+    for(let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        const testWidth = metrics.width;
+        if (testWidth > maxWidth && n > 0) {
+            ctx.fillText(line, x, y);
+            line = words[n] + ' ';
+            y += lineHeight;
+        } else {
+            line = testLine;
+        }
+    }
+    ctx.fillText(line, x, y);
 }
 
-async function generateProfileCard(user, member, flowData, pontoData, repData, roleTags) {
-    // 1. Configuração do Canvas
+// Função para desenhar retângulo arredondado
+function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+    if (typeof stroke === 'undefined') {
+        stroke = true;
+    }
+    if (typeof radius === 'undefined') {
+        radius = 5;
+    }
+    if (typeof radius === 'number') {
+        radius = {tl: radius, tr: radius, br: radius, bl: radius};
+    } else {
+        var defaultRadius = {tl: 0, tr: 0, br: 0, bl: 0};
+        for (var side in defaultRadius) {
+            radius[side] = radius[side] || defaultRadius[side];
+        }
+    }
+    ctx.beginPath();
+    ctx.moveTo(x + radius.tl, y);
+    ctx.lineTo(x + width - radius.tr, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+    ctx.lineTo(x + width, y + height - radius.br);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+    ctx.lineTo(x + radius.bl, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+    ctx.lineTo(x, y + radius.tl);
+    ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+    ctx.closePath();
+    if (fill) {
+        ctx.fill();
+    }
+    if (stroke) {
+        ctx.stroke();
+    }
+}
+
+async function generateProfileCard(user, member, flowData, pontoData, socialData, roleTags) {
     const canvas = createCanvas(800, 450);
     const ctx = canvas.getContext('2d');
 
-    // 2. Fundo (Gradiente Dark Moderno)
-    const gradient = ctx.createLinearGradient(0, 0, 800, 450);
-    gradient.addColorStop(0, '#1a1c20');
-    gradient.addColorStop(1, '#0f1012');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 800, 450);
+    // --- 1. FUNDO (BACKGROUND) ---
+    // Se o usuário tiver um background comprado/configurado, usa ele.
+    // Senão, usa o gradiente padrão dark.
+    if (socialData.background_url) {
+        try {
+            const bg = await loadImage(socialData.background_url);
+            // Desenha a imagem cobrindo tudo (Cover mode simples)
+            ctx.drawImage(bg, 0, 0, 800, 450);
+            
+            // Adiciona uma camada escura semi-transparente para o texto ficar legível
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, 800, 450);
+        } catch (e) {
+            console.log("Erro ao carregar background customizado, usando padrão.");
+            // Fallback para gradiente se a imagem quebrar
+            const gradient = ctx.createLinearGradient(0, 0, 800, 450);
+            gradient.addColorStop(0, '#1a1c20');
+            gradient.addColorStop(1, '#000000');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 800, 450);
+        }
+    } else {
+        const gradient = ctx.createLinearGradient(0, 0, 800, 450);
+        gradient.addColorStop(0, '#232526');
+        gradient.addColorStop(1, '#414345');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 800, 450);
+    }
 
-    // Adiciona um detalhe visual (Barra lateral colorida baseada no cargo mais alto)
-    const mainRoleColor = member.displayHexColor === '#000000' ? '#7289da' : member.displayHexColor;
-    ctx.fillStyle = mainRoleColor;
-    ctx.fillRect(0, 0, 15, 450);
+    // Cor Principal baseada no Cargo
+    const mainColor = member.displayHexColor === '#000000' ? '#00a8ff' : member.displayHexColor;
 
-    // 3. Avatar do Usuário (Redondo com borda)
+    // --- 2. LAYOUT ESTRUTURAL ---
+    
+    // Avatar Shadow/Glow
+    ctx.save();
+    ctx.shadowColor = mainColor;
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(120, 130, 85, 0, Math.PI * 2, true);
+    ctx.fillStyle = mainColor; 
+    // ctx.fill(); // Opcional: preencher fundo do avatar
+    ctx.restore();
+
+    // Avatar Clip & Draw
     try {
         const avatarURL = user.displayAvatarURL({ extension: 'png', size: 256 });
         const avatar = await loadImage(avatarURL);
         
         ctx.save();
         ctx.beginPath();
-        ctx.arc(120, 120, 80, 0, Math.PI * 2, true);
+        ctx.arc(120, 130, 80, 0, Math.PI * 2, true);
         ctx.closePath();
         ctx.clip();
-        ctx.drawImage(avatar, 40, 40, 160, 160);
+        ctx.drawImage(avatar, 40, 50, 160, 160);
         ctx.restore();
 
         // Borda do Avatar
         ctx.beginPath();
-        ctx.arc(120, 120, 80, 0, Math.PI * 2, true);
+        ctx.arc(120, 130, 80, 0, Math.PI * 2, true);
         ctx.lineWidth = 5;
-        ctx.strokeStyle = mainRoleColor;
+        ctx.strokeStyle = mainColor;
         ctx.stroke();
     } catch (err) {
-        console.error("Erro ao carregar avatar:", err);
+        console.error(err);
     }
 
-    // 4. Textos Principais
+    // --- 3. INFORMAÇÕES DE TEXTO ---
+    
+    // Nome do Usuário
     ctx.fillStyle = '#FFFFFF';
-    
-    // Nome de Usuário
-    ctx.font = 'bold 40px Sans';
-    ctx.fillText(user.username, 230, 80);
+    ctx.font = 'bold 42px Sans';
+    ctx.fillText(user.username, 230, 90);
 
-    // Tag/Cargo Principal
-    ctx.font = '25px Sans';
-    ctx.fillStyle = '#AAAAAA';
-    ctx.fillText(member.roles.highest.name.toUpperCase(), 230, 115);
+    // Cargo Principal
+    ctx.fillStyle = mainColor;
+    ctx.font = 'bold 24px Sans';
+    ctx.fillText(member.roles.highest.name.toUpperCase(), 230, 125);
 
-    // 5. Estatísticas (Cards Internos)
+    // Biografia (Com quebra de linha)
+    ctx.fillStyle = '#CCCCCC';
+    ctx.font = '18px Sans';
+    const bioText = socialData.bio || "Este usuário é misterioso e ainda não definiu uma biografia.";
+    wrapText(ctx, bioText, 230, 160, 500, 22);
+
+    // --- 4. CARD DE ESTATÍSTICAS (O "HUD") ---
     
-    // Função auxiliar para desenhar box de stats
-    const drawStatBox = (x, y, icon, label, value, color) => {
-        // Fundo do box
-        ctx.fillStyle = '#2f3136';
-        ctx.beginPath();
-        ctx.roundRect(x, y, 240, 80, 10);
-        ctx.fill();
-        
-        // Barra lateral do box
+    const startY = 270;
+    
+    // Fundo do HUD
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    roundRect(ctx, 40, startY, 720, 100, 15, true, false);
+
+    // Divisores
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.fillRect(280, startY + 15, 2, 70);
+    ctx.fillRect(520, startY + 15, 2, 70);
+
+    // Stats Functions
+    const drawStat = (label, value, x, color) => {
+        ctx.font = 'bold 28px Sans';
         ctx.fillStyle = color;
-        ctx.fillRect(x, y + 10, 5, 60);
-
-        // Texto
-        ctx.font = 'bold 24px Sans';
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(value, x + 20, y + 45);
+        ctx.textAlign = 'center';
+        ctx.fillText(value, x, startY + 45);
         
         ctx.font = '16px Sans';
-        ctx.fillStyle = '#BBBBBB';
-        ctx.fillText(label.toUpperCase(), x + 20, y + 65);
-        
-        // Ícone (Texto por enquanto, pode ser imagem)
-        ctx.font = '30px Sans';
-        ctx.fillText(icon, x + 190, y + 50);
+        ctx.fillStyle = '#AAAAAA';
+        ctx.fillText(label.toUpperCase(), x, startY + 75);
+        ctx.textAlign = 'left'; // Reset
     };
 
+    // Formatações
     const coins = flowData?.balance || 0;
     const timeMs = parseInt(pontoData?.total_ms || 0);
-    
-    // Formata o tempo (Ex: 120h) - Simplificado para caber
     const hours = Math.floor(timeMs / (1000 * 60 * 60));
-    const timeDisplay = `${hours} Horas`;
+    const rep = socialData?.reputation || 0;
 
-    const rep = repData?.reputation || 0;
+    drawStat('FlowCoins', `🪙 ${coins.toLocaleString()}`, 160, '#f1c40f');
+    drawStat('Horas Totais', `⏱️ ${hours}h`, 400, '#2ecc71');
+    drawStat('Reputação', `⭐ ${rep}`, 640, '#9b59b6');
 
-    // Desenha os boxes
-    drawStatBox(40, 250, '💰', 'FlowCoins', coins.toLocaleString(), '#f1c40f');
-    drawStatBox(300, 250, '⏱️', 'Tempo Trabalhado', timeDisplay, '#2ecc71');
-    drawStatBox(560, 250, '⭐', 'Reputação', rep.toLocaleString(), '#9b59b6');
-
-    // 6. Badges / Role Tags
-    // Pega as tags do banco (role_tags) que o usuário tem o cargo correspondente
-    ctx.font = '20px Sans';
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillText("CONQUISTAS & BADGES", 40, 370);
+    // --- 5. BADGES / CONQUISTAS ---
     
-    let badgeX = 40;
-    const badgeY = 390;
+    // Barra inferior para badges
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.fillRect(0, 400, 800, 50);
+    
+    ctx.font = 'bold 16px Sans';
+    ctx.fillStyle = '#555';
+    ctx.fillText("BADGES:", 20, 430);
 
+    let badgeX = 100;
     if (roleTags && roleTags.length > 0) {
-        // Desenha badges (simulando com texto/emoji, ideal seria carregar imagens)
-        ctx.font = '30px Sans';
+        ctx.font = '24px Sans'; // Emojis ficam maiores
         for (const tag of roleTags) {
-            ctx.fillText(tag.tag, badgeX, badgeY + 30);
-            badgeX += 45;
+            ctx.fillText(tag.tag, badgeX, 432);
+            badgeX += 40;
         }
     } else {
-        ctx.font = 'italic 18px Sans';
-        ctx.fillStyle = '#555555';
-        ctx.fillText("Nenhuma badge conquistada ainda.", 40, 410);
+        ctx.font = 'italic 14px Sans';
+        ctx.fillStyle = '#444';
+        ctx.fillText("Nenhuma conquista ainda...", badgeX, 430);
     }
-
-    // 7. Footer
-    ctx.font = '14px Sans';
-    ctx.fillStyle = '#444444';
-    ctx.textAlign = 'right';
-    ctx.fillText("BasicFlow Social System", 780, 440);
 
     return canvas.toBuffer();
 }
