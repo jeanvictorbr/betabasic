@@ -440,6 +440,23 @@ client.on(Events.InteractionCreate, async interaction => {
     
     // Obter configurações da guilda (essencial para verificações)
     const guildSettings = await db.getGuildSettings(interaction.guildId);
+
+
+    if (interaction.isButton()) {
+    // 1. Tenta achar o botão pelo ID Exato
+    let buttonHandler = client.buttons.get(interaction.customId);
+
+    // 2. Se não achou, verifica se algum handler aceita ID Dinâmico (Função)
+    if (!buttonHandler) {
+        buttonHandler = client.buttons.find(handler => 
+            typeof handler.customId === 'function' && handler.customId(interaction.customId)
+        );
+    }
+
+    if (buttonHandler) {
+        await buttonHandler.execute(interaction);
+    }
+}
     if (!guildSettings && interaction.guildId) {
         // Se não houver configurações, é provável que a guilda não esteja no DB.
         // Apenas comandos de devpanel e ativar devem funcionar.

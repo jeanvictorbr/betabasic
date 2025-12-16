@@ -3,16 +3,23 @@ const { generateRankingCard } = require('../../utils/rankingGenerator.js');
 const { AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 module.exports = {
-    customId: 'ponto_show_ranking',
+    // Detecta qualquer ID que comece com 'ponto_rank_page_'
+    customId: (id) => id.startsWith('ponto_rank_page_'),
+    
     async execute(interaction) {
-        await interaction.deferReply({ flags: 1 << 6 }); // Ephemeral para não floodar
+        await interaction.deferUpdate(); // Usa deferUpdate para atualizar a mensagem existente
 
+        // Extrai o número da página do ID (ex: ponto_rank_page_2 -> 2)
+        const requestedPage = parseInt(interaction.customId.split('_')[3]);
         const guildId = interaction.guild.id;
-        const page = 1;
         const itemsPerPage = 10;
-        const offset = (page - 1) * itemsPerPage;
+        
+        // Segurança
+        if (isNaN(requestedPage) || requestedPage < 1) return;
 
-        // 1. Busca Dados e Total
+        const offset = (requestedPage - 1) * itemsPerPage;
+
+        // 1. Busca Dados
         const [rankingRes, countRes] = await Promise.all([
             db.query(`
                 SELECT user_id, total_ms 
@@ -24,14 +31,13 @@ module.exports = {
             db.query(`SELECT COUNT(*) FROM ponto_leaderboard WHERE guild_id = $1`, [guildId])
         ]);
 
-        if (rankingRes.rows.length === 0) {
-            return interaction.editReply("❌ O Ranking está vazio ainda.");
-        }
-
         const totalItems = parseInt(countRes.rows[0].count);
         const totalPages = Math.ceil(totalItems / itemsPerPage);
 
-        // 2. Prepara Dados para o Canvas (Fetch Users)
+        // Se a página pedida não existe mais (ex: deletaram usuários), volta pra 1
+        if (requestedPage > totalPages && totalPages > 0) return; // Ou tratar melhor
+
+        // 2. Prepara Dados
         const rankingData = [];
         let position = offset + 1;
 
@@ -48,31 +54,32 @@ module.exports = {
             });
         }
 
-        // 3. Gera Imagem
-        const buffer = await generateRankingCard(interaction.guild, rankingData, page, totalPages);
+        // 3. Gera Nova Imagem
+        const buffer = await generateRankingCard(interaction.guild, rankingData, requestedPage, totalPages);
         const attachment = new AttachmentBuilder(buffer, { name: 'ranking.png' });
 
-        // 4. Botões de Navegação
+        // 4. Atualiza Botões
         const row = new ActionRowBuilder();
         
         row.addComponents(
             new ButtonBuilder()
-                .setCustomId(`ponto_rank_page_${page - 1}`)
+                .setCustomId(`ponto_rank_page_${requestedPage - 1}`)
                 .setLabel('◀ Anterior')
                 .setStyle(ButtonStyle.Secondary)
-                .setDisabled(true), // Página 1, anterior desativado
+                .setDisabled(requestedPage <= 1),
             new ButtonBuilder()
-                .setCustomId('ponto_rank_ignore') // Botão meio (Contador)
-                .setLabel(`${page}/${totalPages}`)
+                .setCustomId('ponto_rank_ignore')
+                .setLabel(`${requestedPage}/${totalPages}`)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(true),
             new ButtonBuilder()
-                .setCustomId(`ponto_rank_page_${page + 1}`)
+                .setCustomId(`ponto_rank_page_${requestedPage + 1}`)
                 .setLabel('Próxima ▶')
                 .setStyle(ButtonStyle.Secondary)
-                .setDisabled(totalPages <= 1) // Se só tem 1 pág, desativa
+                .setDisabled(requestedPage >= totalPages)
         );
 
+        // Edita a mensagem original com a nova imagem e botões
         await interaction.editReply({ 
             files: [attachment], 
             components: [row] 
