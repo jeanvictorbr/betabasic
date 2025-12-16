@@ -1,9 +1,7 @@
 const { AttachmentBuilder } = require('discord.js');
 const db = require('../../database.js');
-// Importa o gerador novo (Certifique-se que o nome do arquivo bate com o import)
 const { generateRanking } = require('../../utils/rankingGenerator.js');
 
-// Função auxiliar simples para formatar tempo
 function formatTime(ms) {
     if (!ms) return "0h 0m";
     const h = Math.floor(ms / (1000 * 60 * 60));
@@ -12,14 +10,18 @@ function formatTime(ms) {
 }
 
 module.exports = {
-    customId: 'ponto_show_ranking', // ID do botão
+    customId: 'ponto_show_ranking',
 
     async execute(interaction) {
-        // Deferir a resposta para não dar erro de tempo limite, pois gerar imagem demora
-        await interaction.deferReply({ ephemeral: true });
+        // --- CORREÇÃO DO ERRO ---
+        // Verifica se já foi respondido. Se não, usa deferReply.
+        // Se já foi (deferred), apenas continua.
+        if (!interaction.deferred && !interaction.replied) {
+            await interaction.deferReply({ ephemeral: true });
+        }
 
         try {
-            // 1. Busca os TOP 10 do Banco de Dados
+            // 1. Busca TOP 10
             const res = await db.query(`
                 SELECT user_id, total_ms 
                 FROM ponto_leaderboard 
@@ -29,10 +31,10 @@ module.exports = {
             `, [interaction.guild.id]);
 
             if (res.rows.length === 0) {
-                return interaction.editReply("🎅 Ho Ho Ho! Ninguém bateu ponto ainda. A lista está vazia!");
+                return interaction.editReply("O ranking está vazio! Ninguém bateu ponto ainda.");
             }
 
-            // 2. Prepara os dados buscando o NOME DA GUILDA (Apelido)
+            // 2. Processa Nomes da Guilda
             const rankingData = [];
 
             for (const row of res.rows) {
@@ -40,18 +42,17 @@ module.exports = {
                 let avatarUrl = 'https://cdn.discordapp.com/embed/avatars/0.png';
 
                 try {
-                    // Tenta buscar o MEMBRO na Guilda (Cache ou API)
+                    // Busca membro para pegar apelido no servidor
                     const member = await interaction.guild.members.fetch(row.user_id).catch(() => null);
 
                     if (member) {
-                        // Se achou o membro, pega o Apelido (Display Name) e o Avatar da Guilda (se tiver)
-                        displayName = member.displayName;
+                        displayName = member.displayName; // Nome na Guilda (Apelido)
                         avatarUrl = member.displayAvatarURL({ extension: 'png', size: 128 });
                     } else {
-                        // Se o membro saiu, tenta pegar o usuário global
+                        // Fallback user global
                         const user = await interaction.client.users.fetch(row.user_id).catch(() => null);
                         if (user) {
-                            displayName = user.username; // Fallback para username
+                            displayName = user.username;
                             avatarUrl = user.displayAvatarURL({ extension: 'png', size: 128 });
                         }
                     }
@@ -60,25 +61,28 @@ module.exports = {
                 }
 
                 rankingData.push({
-                    displayName: displayName, // MANDANDO O APELIDO DA GUILD
+                    displayName: displayName,
                     avatarUrl: avatarUrl,
                     pointsStr: formatTime(row.total_ms)
                 });
             }
 
-            // 3. Gera a Imagem Natalina
+            // 3. Gera Imagem (Premium + Neve)
             const buffer = await generateRanking(rankingData, interaction.guild.name);
-            const attachment = new AttachmentBuilder(buffer, { name: 'ranking-natal.png' });
+            const attachment = new AttachmentBuilder(buffer, { name: 'ranking.png' });
 
             // 4. Envia
             await interaction.editReply({ 
-                content: `🎄 **Top 10 - Ranking de Atividade** 🎄`,
+                content: `🏆 **Ranking de Atividade**`,
                 files: [attachment] 
             });
 
         } catch (error) {
             console.error(error);
-            await interaction.editReply("❌ Ocorreu um erro ao gerar o ranking de Natal.");
+            // Tenta avisar do erro se possível
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply("❌ Erro ao gerar o ranking.");
+            }
         }
     }
 };

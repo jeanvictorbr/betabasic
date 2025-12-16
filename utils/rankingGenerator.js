@@ -1,18 +1,16 @@
 const { createCanvas, loadImage, registerFont } = require('canvas');
 const path = require('path');
 
-// Tente registrar fontes se existirem
 try {
     registerFont(path.join(__dirname, '../assets/fonts/Poppins-Bold.ttf'), { family: 'Poppins', weight: 'bold' });
     registerFont(path.join(__dirname, '../assets/fonts/Poppins-Regular.ttf'), { family: 'Poppins', weight: 'regular' });
 } catch (e) {}
 
-// --- ÍCONES DE RANK (PNGs DE ALTA QUALIDADE) ---
+// Ícones de Rank (Medalhas PNG)
 const RANK_ICONS = {
     1: 'https://cdn-icons-png.flaticon.com/512/2583/2583344.png', // Ouro
     2: 'https://cdn-icons-png.flaticon.com/512/2583/2583319.png', // Prata
     3: 'https://cdn-icons-png.flaticon.com/512/2583/2583434.png', // Bronze
-    DEFAULT: 'https://cdn-icons-png.flaticon.com/512/3600/3600407.png' // Bolinha de Natal
 };
 
 function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
@@ -33,122 +31,133 @@ function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
     if (stroke) ctx.stroke();
 }
 
+// Função para cortar texto
+function shortText(ctx, text, maxWidth) {
+    let short = text;
+    if (ctx.measureText(short).width > maxWidth) {
+        while (ctx.measureText(short + '...').width > maxWidth) {
+            short = short.slice(0, -1);
+        }
+        short += '...';
+    }
+    return short;
+}
+
 async function generateRanking(data, guildName) {
     const width = 900;
     const height = 850;
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
 
-    // --- 1. FUNDO DE NATAL ---
-    // Gradiente Vermelho Festivo
-    const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-    bgGradient.addColorStop(0, '#8E0E00'); // Vermelho Sangue
-    bgGradient.addColorStop(1, '#1F1C18'); // Escuro embaixo
+    // --- 1. FUNDO PREMIUM DARK (Original) ---
+    const bgGradient = ctx.createRadialGradient(width/2, height/2, 100, width/2, height/2, 600);
+    bgGradient.addColorStop(0, '#1a1a2e'); // Azul escuro profundo
+    bgGradient.addColorStop(1, '#0f0f1a'); // Preto azulado
     ctx.fillStyle = bgGradient;
     ctx.fillRect(0, 0, width, height);
 
-    // Efeito de Neve (Círculos brancos translúcidos)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    for(let i=0; i<120; i++) {
+    // --- 2. EFEITO DE NEVE (Sutil) ---
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; // Neve transparente
+    for(let i=0; i<100; i++) {
         const x = Math.random() * width;
         const y = Math.random() * height;
-        const r = Math.random() * 3.5;
+        const r = Math.random() * 2.5; // Flocos pequenos
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI*2);
         ctx.fill();
     }
 
-    // --- 2. CABEÇALHO ---
-    // Título
+    // Moldura Dourada
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(0, 0, width, height);
+
+    // --- 3. CABEÇALHO ---
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 38px "Poppins", "Sans"';
+    ctx.font = 'bold 36px "Poppins", "Sans"';
     ctx.textAlign = 'center';
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowColor = '#FFD700'; 
     ctx.shadowBlur = 10;
-    ctx.fillText(`🎅 RANKING DE NATAL: ${guildName.toUpperCase()} 🎅`, width / 2, 70);
-    ctx.shadowBlur = 0;
+    ctx.fillText(`🏆 RANKING: ${guildName.toUpperCase()}`, width / 2, 70);
+    ctx.shadowBlur = 0; // Reset shadow
 
-    // Subtítulo
-    ctx.fillStyle = '#F1C40F'; // Dourado
-    ctx.font = '22px "Poppins", "Sans"';
-    ctx.fillText("Quem são os duendes mais trabalhadores?", width / 2, 105);
+    ctx.fillStyle = '#FFD700';
+    ctx.font = '18px "Poppins", "Sans"';
+    ctx.fillText("Top 10 Membros Mais Ativos", width / 2, 100);
 
-    // --- 3. LISTA (TOP 10) ---
-    let y = 150;
+    // --- 4. LISTA DE USUÁRIOS ---
+    let y = 160;
     const rowHeight = 65;
 
     for (let i = 0; i < data.length; i++) {
         const item = data[i];
         const rank = i + 1;
 
-        // Fundo da Linha
-        ctx.fillStyle = rank <= 3 ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.2)';
-        roundRect(ctx, 50, y, 800, 55, 15, true, false);
+        // Fundo da linha (Zebrado sutil)
+        if (rank % 2 !== 0) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+            roundRect(ctx, 50, y - 45, 800, 55, 10, true, false);
+        }
 
-        // --- ÍCONE DE RANK (PNG) ---
-        // Aqui substituímos as "placas" pelos ícones PNG
-        const iconUrl = RANK_ICONS[rank] || RANK_ICONS.DEFAULT;
-        try {
-            const iconImg = await loadImage(iconUrl);
-            ctx.drawImage(iconImg, 30, y - 5, 60, 60); // Ícone saindo um pouco pra fora
-        } catch (e) {
-            // Fallback se der erro na imagem
-            ctx.fillStyle = '#FFF';
-            ctx.font = 'bold 30px "Poppins"';
-            ctx.fillText(`#${rank}`, 60, y + 38);
+        // --- ÍCONE DE RANK (PNG ou Texto) ---
+        if (RANK_ICONS[rank]) {
+            try {
+                const medal = await loadImage(RANK_ICONS[rank]);
+                ctx.drawImage(medal, 70, y - 50, 45, 45); // Medalha
+            } catch (e) {}
+        } else {
+            // Texto normal para 4º lugar em diante
+            ctx.fillStyle = '#888';
+            ctx.font = 'bold 28px "Poppins"';
+            ctx.fillText(`#${rank}`, 92, y - 18);
         }
 
         // --- AVATAR ---
-        const avatarSize = 45;
-        const avatarX = 110;
-        const avatarY = y + 5;
+        const avatarSize = 44;
+        const avatarX = 150;
         
         ctx.save();
         ctx.beginPath();
-        ctx.arc(avatarX + avatarSize/2, avatarY + avatarSize/2, avatarSize/2, 0, Math.PI*2);
-        ctx.closePath();
+        ctx.arc(avatarX + avatarSize/2, y - 27, avatarSize/2, 0, Math.PI*2);
         ctx.clip();
         try {
             const avatar = await loadImage(item.avatarUrl);
-            ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
+            ctx.drawImage(avatar, avatarX, y - 27 - (avatarSize/2), avatarSize, avatarSize);
         } catch(e) {
-            ctx.fillStyle = '#777';
+            ctx.fillStyle = '#555';
             ctx.fill();
         }
         ctx.restore();
 
-        // Borda Verde Natalina no Avatar
-        ctx.strokeStyle = '#2ecc71'; 
+        // Borda Dourada no Top 3, Cinza nos outros
+        ctx.strokeStyle = rank <= 3 ? '#FFD700' : '#555';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(avatarX + avatarSize/2, avatarY + avatarSize/2, avatarSize/2, 0, Math.PI*2);
+        ctx.arc(avatarX + avatarSize/2, y - 27, avatarSize/2, 0, Math.PI*2);
         ctx.stroke();
 
-        // --- NOME (DO SERVIDOR) ---
+        // --- NOME (Da Guilda) ---
         ctx.textAlign = 'left';
-        ctx.fillStyle = rank === 1 ? '#F1C40F' : '#FFFFFF'; // Top 1 Dourado
-        ctx.font = 'bold 24px "Poppins", "Sans"';
+        ctx.fillStyle = rank === 1 ? '#FFD700' : '#FFFFFF'; // Top 1 Amarelo
+        ctx.font = rank <= 3 ? 'bold 24px "Poppins"' : '22px "Poppins"';
         
-        // Corta nome se for muito grande
-        let displayName = item.displayName || 'Desconhecido';
-        if (displayName.length > 22) displayName = displayName.substring(0, 22) + '...';
-        
-        ctx.fillText(displayName, 170, y + 37);
+        const name = shortText(ctx, item.displayName, 400);
+        ctx.fillText(name, 220, y - 20);
 
         // --- TEMPO ---
         ctx.textAlign = 'right';
-        ctx.fillStyle = '#2ecc71'; // Verde
-        ctx.font = 'bold 22px "Poppins", "Sans"';
-        ctx.fillText(item.pointsStr || "0h 0m", 830, y + 37);
+        ctx.fillStyle = '#4cd137'; // Verde Neon
+        ctx.font = 'bold 22px "Poppins"';
+        ctx.fillText(item.pointsStr, 830, y - 20);
 
-        y += rowHeight + 5; // Espaçamento
+        y += rowHeight;
     }
 
     // Footer
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
     ctx.font = '14px "Poppins"';
-    ctx.fillText("🎄 Feliz Natal! Continue batendo o ponto para ganhar presentes! 🎁", width/2, height - 20);
+    ctx.fillText("Atualizado em tempo real • BasicFlow System", width / 2, height - 20);
 
     return canvas.toBuffer();
 }
