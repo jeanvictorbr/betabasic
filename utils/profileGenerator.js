@@ -1,34 +1,11 @@
-const { createCanvas, loadImage, registerFont } = require('canvas');
-const path = require('path');
+const { createCanvas, loadImage } = require('canvas');
 
-// Função auxiliar para quebrar texto (Word Wrap)
-function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-    const words = text.split(' ');
-    let line = '';
-
-    for(let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + ' ';
-        const metrics = ctx.measureText(testLine);
-        const testWidth = metrics.width;
-        if (testWidth > maxWidth && n > 0) {
-            ctx.fillText(line, x, y);
-            line = words[n] + ' ';
-            y += lineHeight;
-        } else {
-            line = testLine;
-        }
-    }
-    ctx.fillText(line, x, y);
-}
-
-// Função para desenhar retângulo arredondado
+/**
+ * Utilitário para desenhar retângulos arredondados
+ */
 function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
-    if (typeof stroke === 'undefined') {
-        stroke = true;
-    }
-    if (typeof radius === 'undefined') {
-        radius = 5;
-    }
+    if (typeof stroke === 'undefined') stroke = true;
+    if (typeof radius === 'undefined') radius = 5;
     if (typeof radius === 'number') {
         radius = {tl: radius, tr: radius, br: radius, bl: radius};
     } else {
@@ -48,11 +25,63 @@ function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
     ctx.lineTo(x, y + radius.tl);
     ctx.quadraticCurveTo(x, y, x + radius.tl, y);
     ctx.closePath();
-    if (fill) {
-        ctx.fill();
+    if (fill) ctx.fill();
+    if (stroke) ctx.stroke();
+}
+
+/**
+ * Utilitário para quebra de linha de texto
+ */
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    const words = text.split(' ');
+    let line = '';
+    for(let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+            ctx.fillText(line, x, y);
+            line = words[n] + ' ';
+            y += lineHeight;
+        } else {
+            line = testLine;
+        }
     }
-    if (stroke) {
-        ctx.stroke();
+    ctx.fillText(line, x, y);
+}
+
+/**
+ * Utilitário para abreviar números (1000 -> 1k)
+ */
+function abbreviateNumber(value) {
+    let newValue = value;
+    if (value >= 1000) {
+        const suffixes = ["", "k", "m", "b","t"];
+        const suffixNum = Math.floor( (""+value).length/3 );
+        let shortValue = '';
+        for (let precision = 2; precision >= 1; precision--) {
+            shortValue = parseFloat( (suffixNum != 0 ? (value / Math.pow(1000,suffixNum)) : value).toPrecision(precision));
+            var dotLessShortValue = (shortValue + '').replace(/[^a-zA-Z 0-9]+/g,'');
+            if (dotLessShortValue.length <= 2) { break; }
+        }
+        if (shortValue % 1 != 0)  shortValue = shortValue.toFixed(1);
+        newValue = shortValue+suffixes[suffixNum];
+    }
+    return newValue;
+}
+
+/**
+ * Função para desenhar o efeito de neve (Tema Natal)
+ */
+function drawSnow(ctx, width, height) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    // Desenha 60 flocos aleatórios
+    for(let i = 0; i < 60; i++) {
+        const x = Math.random() * width;
+        const y = Math.random() * height;
+        const radius = Math.random() * 3 + 1;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
     }
 }
 
@@ -60,149 +89,188 @@ async function generateProfileCard(user, member, flowData, pontoData, socialData
     const canvas = createCanvas(800, 450);
     const ctx = canvas.getContext('2d');
 
-    // --- 1. FUNDO (BACKGROUND) ---
-    // Se o usuário tiver um background comprado/configurado, usa ele.
-    // Senão, usa o gradiente padrão dark.
-    if (socialData.background_url) {
+    // --- 1. BACKGROUND (CORREÇÃO & TEMA) ---
+    let bgLoaded = false;
+    
+    // Tenta carregar background do usuário se existir
+    if (socialData.background_url && socialData.background_url.startsWith('http')) {
         try {
             const bg = await loadImage(socialData.background_url);
-            // Desenha a imagem cobrindo tudo (Cover mode simples)
             ctx.drawImage(bg, 0, 0, 800, 450);
+            bgLoaded = true;
             
-            // Adiciona uma camada escura semi-transparente para o texto ficar legível
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            // Adiciona uma camada escura para o texto ficar legível em qualquer imagem
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
             ctx.fillRect(0, 0, 800, 450);
         } catch (e) {
-            console.log("Erro ao carregar background customizado, usando padrão.");
-            // Fallback para gradiente se a imagem quebrar
-            const gradient = ctx.createLinearGradient(0, 0, 800, 450);
-            gradient.addColorStop(0, '#1a1c20');
-            gradient.addColorStop(1, '#000000');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 800, 450);
+            console.error("Erro ao carregar background customizado (usando padrão):", e.message);
         }
-    } else {
-        const gradient = ctx.createLinearGradient(0, 0, 800, 450);
-        gradient.addColorStop(0, '#232526');
-        gradient.addColorStop(1, '#414345');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 800, 450);
     }
 
-    // Cor Principal baseada no Cargo
-    const mainColor = member.displayHexColor === '#000000' ? '#00a8ff' : member.displayHexColor;
+    // Se não carregou (ou não tem), usa o TEMA DE NATAL PADRÃO
+    if (!bgLoaded) {
+        // Gradiente Natalino "Noite Mágica"
+        const gradient = ctx.createLinearGradient(0, 0, 800, 450);
+        gradient.addColorStop(0, '#0f2027'); // Azul noite profundo
+        gradient.addColorStop(0.5, '#203a43');
+        gradient.addColorStop(1, '#2c5364'); // Azul inverno
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 800, 450);
 
-    // --- 2. LAYOUT ESTRUTURAL ---
-    
-    // Avatar Shadow/Glow
+        // Adiciona Neve
+        drawSnow(ctx, 800, 450);
+        
+        // Faixa Decorativa Vermelha no topo (Fita de presente)
+        ctx.fillStyle = '#c0392b'; 
+        ctx.fillRect(0, 0, 800, 8);
+    }
+
+    // --- 2. PAINEL DE VIDRO (GLASSMORPHISM) ---
+    // Cria um painel central translúcido para dar destaque
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 1;
+    roundRect(ctx, 30, 30, 740, 390, 20, true, true);
+
+    // --- 3. AVATAR ---
+    const avatarSize = 140;
+    const avatarX = 70;
+    const avatarY = 70;
+
+    // Sombra do avatar
     ctx.save();
-    ctx.shadowColor = mainColor;
-    ctx.shadowBlur = 15;
+    ctx.shadowColor = '#000000';
+    ctx.shadowBlur = 20;
     ctx.beginPath();
-    ctx.arc(120, 130, 85, 0, Math.PI * 2, true);
-    ctx.fillStyle = mainColor; 
-    // ctx.fill(); // Opcional: preencher fundo do avatar
+    ctx.arc(avatarX + avatarSize/2, avatarY + avatarSize/2, avatarSize/2, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
 
-    // Avatar Clip & Draw
+    // Desenho do Avatar
     try {
         const avatarURL = user.displayAvatarURL({ extension: 'png', size: 256 });
         const avatar = await loadImage(avatarURL);
         
         ctx.save();
         ctx.beginPath();
-        ctx.arc(120, 130, 80, 0, Math.PI * 2, true);
+        ctx.arc(avatarX + avatarSize/2, avatarY + avatarSize/2, avatarSize/2, 0, Math.PI * 2);
         ctx.closePath();
         ctx.clip();
-        ctx.drawImage(avatar, 40, 50, 160, 160);
+        ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
         ctx.restore();
 
-        // Borda do Avatar
+        // Borda Festiva (Vermelha de Natal)
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = '#e74c3c'; 
         ctx.beginPath();
-        ctx.arc(120, 130, 80, 0, Math.PI * 2, true);
-        ctx.lineWidth = 5;
-        ctx.strokeStyle = mainColor;
+        ctx.arc(avatarX + avatarSize/2, avatarY + avatarSize/2, avatarSize/2, 0, Math.PI * 2);
         ctx.stroke();
     } catch (err) {
-        console.error(err);
+        console.error("Erro ao desenhar avatar:", err);
     }
 
-    // --- 3. INFORMAÇÕES DE TEXTO ---
+    // --- 4. TEXTOS E DETALHES ---
+    const textStartX = 250;
     
     // Nome do Usuário
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 42px Sans';
-    ctx.fillText(user.username, 230, 90);
+    ctx.font = 'bold 38px Sans';
+    ctx.fillText(user.username, textStartX, 90);
 
-    // Cargo Principal
-    ctx.fillStyle = mainColor;
-    ctx.font = 'bold 24px Sans';
-    ctx.fillText(member.roles.highest.name.toUpperCase(), 230, 125);
+    // Cargo Principal (Estilo Badge)
+    const roleName = member.roles.highest.name.toUpperCase();
+    const roleColor = member.displayHexColor === '#000000' ? '#2ecc71' : member.displayHexColor;
+    
+    ctx.font = 'bold 16px Sans';
+    const roleWidth = ctx.measureText(roleName).width + 20;
+    
+    // Fundo do cargo
+    ctx.fillStyle = roleColor;
+    roundRect(ctx, textStartX, 108, roleWidth, 24, 6, true, false);
+    
+    // Texto do cargo
+    ctx.fillStyle = '#FFFFFF';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 2;
+    ctx.fillText(roleName, textStartX + 10, 126);
+    ctx.shadowBlur = 0; // Reset sombra
 
-    // Biografia (Com quebra de linha)
-    ctx.fillStyle = '#CCCCCC';
+    // Biografia
+    ctx.fillStyle = '#DDDDDD';
     ctx.font = '18px Sans';
-    const bioText = socialData.bio || "Este usuário é misterioso e ainda não definiu uma biografia.";
-    wrapText(ctx, bioText, 230, 160, 500, 22);
+    const bioText = socialData.bio || "Ho Ho Ho! Este usuário ainda não definiu sua biografia de Natal.";
+    wrapText(ctx, `"${bioText}"`, textStartX, 165, 480, 24);
 
-    // --- 4. CARD DE ESTATÍSTICAS (O "HUD") ---
-    
-    const startY = 270;
-    
-    // Fundo do HUD
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-    roundRect(ctx, 40, startY, 720, 100, 15, true, false);
+    // --- 5. ESTATÍSTICAS (CARDS PREMIUM) ---
+    const statsY = 260;
+    const cardWidth = 155; // Menores para caberem lado a lado
+    const gap = 15;
 
-    // Divisores
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.fillRect(280, startY + 15, 2, 70);
-    ctx.fillRect(520, startY + 15, 2, 70);
-
-    // Stats Functions
-    const drawStat = (label, value, x, color) => {
-        ctx.font = 'bold 28px Sans';
-        ctx.fillStyle = color;
-        ctx.textAlign = 'center';
-        ctx.fillText(value, x, startY + 45);
+    const drawStatCard = (x, icon, title, value, color) => {
+        // Fundo do card
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        roundRect(ctx, x, statsY, cardWidth, 80, 10, true, false);
         
-        ctx.font = '16px Sans';
+        // Barra colorida inferior
+        ctx.fillStyle = color;
+        ctx.fillRect(x, statsY + 76, cardWidth, 4);
+
+        // Ícone
+        ctx.font = '28px Sans';
+        ctx.fillText(icon, x + 15, statsY + 50);
+
+        // Valor
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 22px Sans';
+        ctx.fillText(value, x + 55, statsY + 35);
+
+        // Título
         ctx.fillStyle = '#AAAAAA';
-        ctx.fillText(label.toUpperCase(), x, startY + 75);
-        ctx.textAlign = 'left'; // Reset
+        ctx.font = '12px Sans';
+        ctx.fillText(title.toUpperCase(), x + 55, statsY + 58);
     };
 
-    // Formatações
     const coins = flowData?.balance || 0;
     const timeMs = parseInt(pontoData?.total_ms || 0);
     const hours = Math.floor(timeMs / (1000 * 60 * 60));
     const rep = socialData?.reputation || 0;
 
-    drawStat('FlowCoins', `🪙 ${coins.toLocaleString()}`, 160, '#f1c40f');
-    drawStat('Horas Totais', `⏱️ ${hours}h`, 400, '#2ecc71');
-    drawStat('Reputação', `⭐ ${rep}`, 640, '#9b59b6');
-
-    // --- 5. BADGES / CONQUISTAS ---
+    // Card 1: FlowCoins (Presente)
+    drawStatCard(textStartX, '🎁', 'FlowCoins', abbreviateNumber(coins), '#f1c40f');
     
-    // Barra inferior para badges
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.fillRect(0, 400, 800, 50);
+    // Card 2: Tempo (Árvore)
+    drawStatCard(textStartX + cardWidth + gap, '🎄', 'Tempo Total', `${hours}h`, '#2ecc71');
     
-    ctx.font = 'bold 16px Sans';
-    ctx.fillStyle = '#555';
-    ctx.fillText("BADGES:", 20, 430);
+    // Card 3: Reputação (Estrela)
+    drawStatCard(textStartX + (cardWidth + gap) * 2, '⭐', 'Reputação', abbreviateNumber(rep), '#9b59b6');
 
-    let badgeX = 100;
+    // --- 6. BADGES / CONQUISTAS ---
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    roundRect(ctx, 30, 365, 740, 45, 10, true, false);
+    
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 14px Sans';
+    ctx.fillText("CONQUISTAS:", 50, 393);
+
+    let badgeX = 160;
     if (roleTags && roleTags.length > 0) {
-        ctx.font = '24px Sans'; // Emojis ficam maiores
+        ctx.font = '22px Sans';
         for (const tag of roleTags) {
-            ctx.fillText(tag.tag, badgeX, 432);
-            badgeX += 40;
+            // Desenha emoji da tag
+            ctx.fillText(tag.tag, badgeX, 395);
+            badgeX += 35;
         }
     } else {
+        ctx.fillStyle = '#888';
         ctx.font = 'italic 14px Sans';
-        ctx.fillStyle = '#444';
-        ctx.fillText("Nenhuma conquista ainda...", badgeX, 430);
+        ctx.fillText("Nenhuma conquista...", badgeX, 393);
     }
+
+    // Marca d'água Natalina
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.font = '12px Sans';
+    ctx.textAlign = 'right';
+    ctx.fillText("BasicFlow Christmas Edition 🎅", 750, 405);
 
     return canvas.toBuffer();
 }
