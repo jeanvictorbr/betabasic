@@ -8,15 +8,17 @@ try {
 } catch (e) { }
 
 const ICONS = {
-    COIN: 'https://cdn-icons-png.flaticon.com/512/2454/2454269.png',
-    REP: 'https://cdn-icons-png.flaticon.com/512/1828/1828884.png',
-    TIME: 'https://cdn-icons-png.flaticon.com/512/2088/2088617.png'
+    // Novos ícones PNG bonitos
+    ROLES: 'https://cdn-icons-png.flaticon.com/512/10628/10628960.png', // Ícone de Crachá/Cargos
+    REP: 'https://cdn-icons-png.flaticon.com/512/10479/10479862.png',  // Estrela 3D
+    TIME: 'https://cdn-icons-png.flaticon.com/512/10479/10479929.png', // Relógio 3D
+    HEART: 'https://cdn-icons-png.flaticon.com/512/9466/9466004.png'   // Coração Fofo
 };
 
 function formatTime(ms) {
     if (!ms) return "0h";
     const hours = Math.floor(ms / (1000 * 60 * 60));
-    return `${hours}h`; // Simplificado para caber melhor
+    return `${hours}h`; 
 }
 
 // Helper para desenhar retângulos arredondados
@@ -54,8 +56,8 @@ async function generateProfileCard(targetUser, memberData) {
             background = await loadImage(memberData.social.background_url);
         } else {
             const grd = ctx.createLinearGradient(0, 0, 900, 500);
-            grd.addColorStop(0, '#121212');
-            grd.addColorStop(1, '#2c3e50');
+            grd.addColorStop(0, '#101010');
+            grd.addColorStop(1, '#232526');
             ctx.fillStyle = grd;
             ctx.fillRect(0, 0, 900, 500);
         }
@@ -66,10 +68,10 @@ async function generateProfileCard(targetUser, memberData) {
     }
 
     // Overlay Escuro
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
     roundRect(ctx, 20, 20, 860, 460, 25, true, false);
 
-    // --- 2. AVATAR DO USUÁRIO ---
+    // --- 2. AVATAR ---
     const avatarSize = 160;
     const avatarX = 60;
     const avatarY = 60;
@@ -96,183 +98,182 @@ async function generateProfileCard(targetUser, memberData) {
     ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2, true);
     ctx.stroke();
 
-    // --- 3. CARGO MAIOR (Abaixo da foto) ---
+    // --- 3. TAG CARGO + MEMBRO DESDE ---
     const roleName = memberData.highestRoleName || 'Membro';
     ctx.font = 'bold 18px "Poppins", sans-serif';
     const roleWidth = ctx.measureText(roleName).width + 30;
     const roleX = avatarX + (avatarSize / 2) - (roleWidth / 2);
     const roleY = avatarY + avatarSize + 20;
 
+    // Etiqueta do Cargo
     ctx.fillStyle = memberData.highestRoleColor || '#555';
     roundRect(ctx, roleX, roleY, roleWidth, 30, 10, true, false);
-    
-    ctx.fillStyle = '#ffffff'; // Texto branco sempre para contraste
+    ctx.fillStyle = '#ffffff'; 
     ctx.textAlign = 'center';
     ctx.fillText(roleName.toUpperCase(), roleX + (roleWidth / 2), roleY + 21);
-    ctx.textAlign = 'left'; // Reset
+    ctx.textAlign = 'left';
 
-    // --- 4. MEMBRO DESDE (Abaixo do cargo) ---
-    const joinedDate = memberData.joinedAt ? new Date(memberData.joinedAt).toLocaleDateString('pt-BR') : '??/??/????';
-    ctx.fillStyle = '#aaaaaa';
+    // Data de entrada
+    const joinedDate = memberData.joinedAt ? new Date(memberData.joinedAt).toLocaleDateString('pt-BR') : '??/??';
+    ctx.fillStyle = '#888';
     ctx.font = '14px "Poppins", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`Membro desde:\n${joinedDate}`, avatarX + (avatarSize / 2), roleY + 55);
-    ctx.textAlign = 'left'; // Reset
+    ctx.fillText(`Desde: ${joinedDate}`, avatarX + (avatarSize / 2), roleY + 55);
+    ctx.textAlign = 'left';
 
-    // --- 5. CABEÇALHO (Nome e Bio) ---
+    // --- 4. TEXTOS (Cabeçalho) ---
     const textStartX = 280;
     
-    // Nome Principal
+    // Nome Display
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 42px "Poppins", sans-serif';
     const displayName = targetUser.globalName || targetUser.username;
     ctx.fillText(displayName, textStartX, 100);
 
-    // Tag (@usuario)
+    // Username (@)
     ctx.fillStyle = '#aaaaaa';
     ctx.font = '24px "Poppins", sans-serif';
     ctx.fillText(`@${targetUser.username}`, textStartX, 135);
 
-    // Ícone da Guild (Canto Superior Direito)
+    // Ícone da Guild
     if (memberData.guildIconUrl) {
         try {
             const guildIcon = await loadImage(memberData.guildIconUrl);
-            const gIconSize = 70;
-            const gIconX = 780;
+            const gIconSize = 60;
+            const gIconX = 790;
             const gIconY = 50;
-
             ctx.save();
             ctx.beginPath();
             ctx.arc(gIconX + gIconSize/2, gIconY + gIconSize/2, gIconSize/2, 0, Math.PI*2);
             ctx.clip();
             ctx.drawImage(guildIcon, gIconX, gIconY, gIconSize, gIconSize);
             ctx.restore();
-            
-            // Borda fina
-            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(gIconX + gIconSize/2, gIconY + gIconSize/2, gIconSize/2, 0, Math.PI*2);
-            ctx.stroke();
         } catch (e) {}
     }
 
     // Bio
-    ctx.fillStyle = '#dddddd';
+    ctx.fillStyle = '#cccccc';
     ctx.font = 'italic 18px "Poppins", sans-serif';
-    const bio = memberData.social?.bio || "Use /social bio para definir sua mensagem personalizada aqui.";
+    const bio = memberData.social?.bio || "Digite /social bio para alterar esta mensagem...";
     wrapText(ctx, bio, textStartX, 180, 500, 25);
 
-    // --- 6. STATS BOXES (Ícones PNG) ---
+    // --- 5. STATS (Substituindo Saldo por Cargos) ---
     const statsY = 300;
     const boxWidth = 160;
     const spacing = 20;
 
-    const iconCoin = await loadImage(ICONS.COIN).catch(()=>null);
+    const iconRole = await loadImage(ICONS.ROLES).catch(()=>null);
     const iconRep = await loadImage(ICONS.REP).catch(()=>null);
     const iconTime = await loadImage(ICONS.TIME).catch(()=>null);
 
-    // Box 1: Money
-    drawModernStatBox(ctx, iconCoin, 'Saldo', `R$${memberData.flow?.balance || 0}`, textStartX, statsY, '#f1c40f');
-    // Box 2: Rep
-    drawModernStatBox(ctx, iconRep, 'Reputação', `${memberData.social?.reputation || 0}`, textStartX + boxWidth + spacing, statsY, '#e74c3c');
-    // Box 3: Tempo
+    // Box 1: Cargos
+    drawModernStatBox(ctx, iconRole, 'Cargos', `${memberData.roleCount || 0}`, textStartX, statsY, '#9b59b6');
+    // Box 2: Reputação
+    drawModernStatBox(ctx, iconRep, 'Reputação', `${memberData.social?.reputation || 0}`, textStartX + boxWidth + spacing, statsY, '#f1c40f');
+    // Box 3: Tempo Online
     drawModernStatBox(ctx, iconTime, 'Online', formatTime(memberData.ponto?.total_ms || 0), textStartX + (boxWidth + spacing) * 2, statsY, '#3498db');
 
-    // --- 7. ÚLTIMAS CONQUISTAS (Badges) ---
-    // Área inferior
+    // --- 6. ÚLTIMO ELOGIO (Novo Layout Fofo) ---
     const badgeAreaY = 400;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-    roundRect(ctx, textStartX, badgeAreaY, 520, 60, 10, true, false);
-
-    ctx.fillStyle = '#888';
-    ctx.font = 'bold 12px "Poppins", sans-serif';
-    ctx.fillText("CONQUISTAS (TAGS):", textStartX + 10, badgeAreaY + 15);
-
-    let badgeX = textStartX + 10;
-    const badges = memberData.badges || [];
     
-    if (badges.length === 0) {
-        ctx.fillStyle = '#555';
-        ctx.font = 'italic 14px "Poppins", sans-serif';
-        ctx.fillText("Nenhuma conquista ainda...", badgeX, badgeAreaY + 40);
-    } else {
-        for (let i = 0; i < Math.min(badges.length, 8); i++) {
-            const badge = badges[i];
-            // Fundo da Badge
-            ctx.fillStyle = '#222';
-            ctx.beginPath();
-            ctx.arc(badgeX + 20, badgeAreaY + 35, 18, 0, Math.PI*2);
-            ctx.fill();
-            
-            // Emoji
-            ctx.font = '20px serif'; // Emoji precisa de fonte padrão as vezes
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
+    // Fundo da área
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    roundRect(ctx, textStartX, badgeAreaY, 520, 60, 15, true, false);
+
+    const iconHeart = await loadImage(ICONS.HEART).catch(()=>null);
+    
+    // Desenha o Coração
+    if (iconHeart) {
+        ctx.drawImage(iconHeart, textStartX + 15, badgeAreaY + 10, 40, 40);
+    }
+
+    // Título
+    ctx.fillStyle = '#ff6b81'; // Cor rosa/avermelhada
+    ctx.font = 'bold 12px "Poppins", sans-serif';
+    ctx.fillText("ÚLTIMO ELOGIO DE:", textStartX + 70, badgeAreaY + 20);
+
+    // Dados do Último Elogio
+    const lastRep = memberData.lastRepUser; // Objeto { user: UserObject, date: Date }
+    
+    if (lastRep && lastRep.user) {
+        // Avatar de quem enviou (Pequeno círculo)
+        const senderAvatarSize = 30;
+        const senderX = textStartX + 70;
+        const senderY = badgeAreaY + 26;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(senderX + senderAvatarSize/2, senderY + senderAvatarSize/2, senderAvatarSize/2, 0, Math.PI*2);
+        ctx.clip();
+        try {
+            const sAvatar = await loadImage(lastRep.user.displayAvatarURL({ extension: 'png' }));
+            ctx.drawImage(sAvatar, senderX, senderY, senderAvatarSize, senderAvatarSize);
+        } catch(e) {
             ctx.fillStyle = '#fff';
-            ctx.fillText(badge.icon || '🏅', badgeX + 20, badgeAreaY + 37);
-            
-            // Reset
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'alphabetic';
-            badgeX += 45;
+            ctx.fill();
         }
+        ctx.restore();
+
+        // Nome e Data
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 16px "Poppins", sans-serif';
+        ctx.fillText(lastRep.user.username, senderX + 40, senderY + 20);
+        
+        ctx.fillStyle = '#777';
+        ctx.font = '12px "Poppins", sans-serif';
+        const dateStr = new Date(lastRep.date).toLocaleDateString('pt-BR');
+        ctx.fillText(` em ${dateStr}`, senderX + 40 + ctx.measureText(lastRep.user.username).width + 5, senderY + 20);
+
+    } else {
+        // Se ninguém elogiou ainda
+        ctx.fillStyle = '#888';
+        ctx.font = 'italic 14px "Poppins", sans-serif';
+        ctx.fillText("Ninguém enviou amor ainda... 😢", textStartX + 70, badgeAreaY + 40);
     }
 
     return canvas.toBuffer();
 }
 
 function drawModernStatBox(ctx, icon, label, value, x, y, color) {
-    // Fundo Gradiente
     const grd = ctx.createLinearGradient(x, y, x + 160, y + 80);
     grd.addColorStop(0, 'rgba(255,255,255,0.05)');
-    grd.addColorStop(1, 'rgba(255,255,255,0.01)');
+    grd.addColorStop(1, 'rgba(255,255,255,0.02)');
     ctx.fillStyle = grd;
     roundRect(ctx, x, y, 160, 80, 15, true, false);
 
-    // Barra lateral colorida
+    // Indicador lateral
     ctx.fillStyle = color;
-    roundRect(ctx, x, y + 15, 4, 50, 2, true, false);
+    roundRect(ctx, x, y + 20, 4, 40, 2, true, false);
 
-    // Ícone
     if (icon) {
-        ctx.drawImage(icon, x + 15, y + 20, 35, 35);
-    } else {
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(x + 32, y + 37, 15, 0, Math.PI*2);
-        ctx.fill();
+        ctx.drawImage(icon, x + 15, y + 20, 40, 40);
     }
 
-    // Valor
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 22px "Poppins", sans-serif';
-    ctx.fillText(value, x + 60, y + 35);
+    ctx.font = 'bold 24px "Poppins", sans-serif';
+    ctx.fillText(value, x + 65, y + 35);
 
-    // Label
     ctx.fillStyle = '#aaa';
-    ctx.font = '12px "Poppins", sans-serif';
-    ctx.fillText(label.toUpperCase(), x + 60, y + 55);
+    ctx.font = '11px "Poppins", sans-serif';
+    ctx.fillText(label.toUpperCase(), x + 65, y + 55);
 }
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
     const words = text.split(' ');
     let line = '';
     let linesDrawn = 0;
-
     for(let n = 0; n < words.length; n++) {
         const testLine = line + words[n] + ' ';
         const metrics = ctx.measureText(testLine);
-        const testWidth = metrics.width;
-        if (testWidth > maxWidth && n > 0) {
-            if(linesDrawn < 3) { // Limite de 3 linhas para não estourar
+        if (metrics.width > maxWidth && n > 0) {
+            if(linesDrawn < 3) {
                 ctx.fillText(line, x, y);
                 line = words[n] + ' ';
                 y += lineHeight;
                 linesDrawn++;
             } else {
-                line += "..."; // Adiciona reticências se estourar
-                break; 
+                line += "...";
+                break;
             }
         } else {
             line = testLine;

@@ -8,7 +8,6 @@ module.exports = {
 
         // --- SUBCOMANDO: PERFIL ---
         if (subcommand === 'perfil') {
-            // Define como ephemeral aqui. Todas as respostas subsequentes (editReply) herdam isso.
             await interaction.deferReply({ ephemeral: true });
             
             const targetUser = interaction.options.getUser('usuario') || interaction.user;
@@ -17,114 +16,135 @@ module.exports = {
             if (!targetMember) return interaction.editReply("❌ Usuário não encontrado no servidor.");
 
             try {
-                // 1. Buscas paralelas no DB (CORRIGIDO: Removido 'message' da query de logs)
-                const [flowRes, pontoRes, socialRes, roleTagsRes, repLogsRes] = await Promise.all([
-                    db.query('SELECT balance FROM flow_users WHERE user_id = $1', [targetUser.id]),
+                // 1. Buscas no Banco de Dados
+                // Removi a busca de saldo (flow_users) pois não vamos usar na imagem, 
+                // mas mantive a estrutura caso queira reativar depois.
+                const [pontoRes, socialRes, repLogsRes] = await Promise.all([
                     db.query('SELECT total_ms FROM ponto_leaderboard WHERE user_id = $1 AND guild_id = $2', [targetUser.id, interaction.guild.id]),
                     db.query('SELECT * FROM social_users WHERE user_id = $1', [targetUser.id]),
-                    db.query('SELECT role_id, tag FROM role_tags WHERE guild_id = $1', [interaction.guild.id]),
-                    // REMOVIDO 'message' DAQUI POIS A COLUNA NÃO EXISTE NO SEU SCHEMA
-                    db.query('SELECT author_id, timestamp FROM social_rep_logs WHERE target_id = $1 ORDER BY timestamp DESC', [targetUser.id])
+                    // Pega o último elogio (Limit 1) para mostrar no card
+                    db.query('SELECT author_id, timestamp FROM social_rep_logs WHERE target_id = $1 ORDER BY timestamp DESC LIMIT 1', [targetUser.id])
                 ]);
 
-                // 2. Prepara dados
+                // Busca o histórico completo apenas se o usuário clicar no botão "Ver Elogios" depois
+                // (Para otimizar, não buscamos tudo agora)
+
+                // 2. Processa o "Último Elogio"
+                let lastRepUserObj = null;
+                if (repLogsRes.rows.length > 0) {
+                    try {
+                        const authorUser = await interaction.client.users.fetch(repLogsRes.rows[0].author_id);
+                        lastRepUserObj = {
+                            user: authorUser,
+                            date: repLogsRes.rows[0].timestamp
+                        };
+                    } catch (e) {
+                        // Usuário saiu ou não existe mais
+                    }
+                }
+
+                // 3. Prepara Dados para o Gerador
                 const memberData = {
-                    flow: flowRes.rows[0] || { balance: 0 },
                     ponto: pontoRes.rows[0] || { total_ms: 0 },
-                    social: socialRes.rows[0] || { reputation: 0, bio: 'Sem bio...', background_url: null },
-                    badges: roleTagsRes.rows 
-                        .filter(row => targetMember.roles.cache.has(row.role_id))
-                        .map(row => ({ icon: '🏅', name: row.tag }))
+                    social: socialRes.rows[0] || { reputation: 0, bio: 'Sem biografia...', background_url: null },
+                    
+                    // Dados Visuais Novos
+                    joinedAt: targetMember.joinedAt,
+                    highestRoleName: targetMember.roles.highest.name,
+                    highestRoleColor: targetMember.roles.highest.hexColor,
+                    guildIconUrl: interaction.guild.iconURL({ extension: 'png', size: 256 }),
+                    
+                    // Substituição do Saldo -> Quantidade de Cargos
+                    roleCount: targetMember.roles.cache.size - 1, // -1 para tirar o @everyone
+                    
+                    // Dados do Último Elogio
+                    lastRepUser: lastRepUserObj
                 };
 
-                // 3. Gera Imagem
+                // 4. Gera a Imagem
                 const buffer = await generateProfileCard(targetUser, memberData);
-                const attachment = new AttachmentBuilder(buffer, { name: 'profile.png' });
+                const attachment = new AttachmentBuilder(buffer, { name: 'social-card.png' });
 
-                // 4. Botões
+                // 5. Botões
                 const rowMain = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId('elogiar')
                         .setLabel('Elogiar (+1 Rep)')
-                        .setEmoji('⭐')
+                        .setEmoji('💖') // Emoji fofo no botão também
                         .setStyle(ButtonStyle.Success)
                         .setDisabled(targetUser.id === interaction.user.id),
                     new ButtonBuilder()
                         .setCustomId('ver_elogios')
-                        .setLabel('Ver Elogios')
+                        .setLabel('Histórico')
                         .setEmoji('📜')
-                        .setStyle(ButtonStyle.Primary)
+                        .setStyle(ButtonStyle.Secondary)
                 );
 
-                // Envia (Sem ephemeral: true aqui, pois já foi definido no deferReply)
                 const msg = await interaction.editReply({
                     content: null,
                     files: [attachment],
                     components: [rowMain]
                 });
 
-                // 5. Coletor
+                // 6. Coletor de Botões (Lógica de interação)
                 const collector = msg.createMessageComponentCollector({ time: 300000 });
 
                 collector.on('collect', async i => {
-                    // Botão Elogiar (Lógica simplificada, idealmente mover para handler separado)
                     if (i.customId === 'elogiar') {
-                        if (targetUser.id === i.user.id) return i.reply({ content: "❌ Não pode se auto-elogiar.", ephemeral: true });
+                        if (targetUser.id === i.user.id) return i.reply({ content: "❌ Auto-amor é bom, mas aqui não conta rank!", ephemeral: true });
                         
-                        // Verifica cooldown rápido
+                        // Check Cooldown
                         const check = await db.query('SELECT last_rep_given FROM social_users WHERE user_id = $1', [i.user.id]);
                         if (check.rows.length && check.rows[0].last_rep_given) {
                             const last = new Date(check.rows[0].last_rep_given);
-                            if (new Date() - last < 86400000) return i.reply({ content: "⏳ Você já elogiou hoje.", ephemeral: true });
+                            if (new Date() - last < 86400000) {
+                                const nextTime = Math.floor((last.getTime() + 86400000) / 1000);
+                                return i.reply({ content: `⏳ Volte <t:${nextTime}:R> para elogiar novamente.`, ephemeral: true });
+                            }
                         }
 
-                        // Salva
                         await db.query(`INSERT INTO social_users (user_id, reputation) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET reputation = social_users.reputation + 1`, [targetUser.id]);
                         await db.query(`INSERT INTO social_rep_logs (target_id, author_id, timestamp) VALUES ($1, $2, NOW())`, [targetUser.id, i.user.id]);
                         await db.query(`INSERT INTO social_users (user_id, last_rep_given) VALUES ($1, NOW()) ON CONFLICT (user_id) DO UPDATE SET last_rep_given = NOW()`, [i.user.id]);
 
-                        await i.reply({ content: `✅ Você elogiou **${targetUser.username}**!`, ephemeral: true });
-                        return;
+                        await i.reply({ content: `💖 Você enviou um elogio para **${targetUser.username}**!`, ephemeral: true });
                     }
 
-                    // Navegação
                     if (i.customId === 'ver_elogios' || i.customId === 'voltar_perfil') {
                         if (i.customId === 'voltar_perfil') {
-                            await i.update({ 
-                                files: [attachment], 
-                                embeds: [], 
-                                components: [rowMain] 
-                            });
+                            await i.update({ files: [attachment], embeds: [], components: [rowMain] });
                         } else {
-                            await handlePagination(i, repLogsRes.rows, targetUser);
+                            // Busca logs completos para paginação
+                            const fullLogs = await db.query('SELECT author_id, timestamp FROM social_rep_logs WHERE target_id = $1 ORDER BY timestamp DESC LIMIT 50', [targetUser.id]);
+                            await handlePagination(i, fullLogs.rows, targetUser);
                         }
                     }
                 });
 
             } catch (err) {
                 console.error(err);
-                // Tenta avisar do erro
                 if (!interaction.replied) await interaction.editReply("❌ Erro ao gerar perfil.");
             }
         }
 
-        // --- OUTROS SUBCOMANDOS (Bio, Elogiar direto) ---
+        // --- SUBCOMANDO: BIO ---
         if (subcommand === 'bio') {
             const bioText = interaction.options.getString('texto');
-            if (bioText.length > 150) return interaction.reply({ content: "❌ Máximo 150 caracteres.", ephemeral: true });
+            if (bioText.length > 150) return interaction.reply({ content: "❌ A bio deve ter no máximo 150 caracteres.", ephemeral: true });
 
             await db.query(`INSERT INTO social_users (user_id, bio) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET bio = $2`, [interaction.user.id, bioText]);
             return interaction.reply({ content: `✅ Bio atualizada!\n> "${bioText}"`, ephemeral: true });
         }
 
+        // --- SUBCOMANDO: ELOGIAR (Direto) ---
         if (subcommand === 'elogiar') {
-            // Lógica duplicada do botão, mas para comando direto
             const targetUser = interaction.options.getUser('usuario');
-            if (targetUser.id === interaction.user.id) return interaction.reply({ content: "❌ Auto-elogio não vale.", ephemeral: true });
+            if (targetUser.id === interaction.user.id) return interaction.reply({ content: "❌ Você não pode se elogiar.", ephemeral: true });
             
             const check = await db.query('SELECT last_rep_given FROM social_users WHERE user_id = $1', [interaction.user.id]);
             if (check.rows.length && check.rows[0].last_rep_given) {
-                if (new Date() - new Date(check.rows[0].last_rep_given) < 86400000) return interaction.reply({ content: "⏳ Aguarde 24h para elogiar novamente.", ephemeral: true });
+                const diff = new Date() - new Date(check.rows[0].last_rep_given);
+                if (diff < 86400000) return interaction.reply({ content: "⏳ Você já usou seu elogio diário.", ephemeral: true });
             }
 
             await db.query(`INSERT INTO social_users (user_id, reputation) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET reputation = social_users.reputation + 1`, [targetUser.id]);
@@ -136,7 +156,7 @@ module.exports = {
     }
 };
 
-// --- PAGINAÇÃO ---
+// --- FUNÇÃO DE PAGINAÇÃO ---
 async function handlePagination(interaction, logs, targetUser) {
     const ITEMS_PER_PAGE = 5;
     let page = 0;
@@ -148,18 +168,17 @@ async function handlePagination(interaction, logs, targetUser) {
         const slicedLogs = logs.slice(start, end);
 
         const embed = new EmbedBuilder()
-            .setColor('#f1c40f')
+            .setColor('#ff6b81')
             .setTitle(`📜 Histórico de Elogios: ${targetUser.username}`)
-            .setFooter({ text: `Página ${currentPage + 1} de ${maxPages} • Total: ${logs.length}` });
+            .setFooter({ text: `Página ${currentPage + 1}/${maxPages} • Total: ${logs.length}` });
 
         if (slicedLogs.length === 0) {
             embed.setDescription("*Nenhum elogio recebido ainda.*");
         } else {
             const description = slicedLogs.map(log => {
                 const date = new Date(log.timestamp).toLocaleDateString('pt-BR');
-                // CORRIGIDO: Texto fixo, já que não temos 'log.message'
-                return `**<@${log.author_id}>**: "Enviou um Elogio!" \n📅 ${date}\n────────────────`;
-            }).join('\n');
+                return `💖 De <@${log.author_id}> em \`${date}\``;
+            }).join('\n────────────────\n');
             embed.setDescription(description);
         }
         return embed;
@@ -173,14 +192,14 @@ async function handlePagination(interaction, logs, targetUser) {
         );
     };
 
-    const response = await interaction.update({
+    const msg = await interaction.update({
         files: [],
         embeds: [generateEmbed(page)],
         components: [getButtons(page)],
         fetchReply: true
     });
 
-    const pagCollector = response.createMessageComponentCollector({ time: 60000 });
+    const pagCollector = msg.createMessageComponentCollector({ time: 60000 });
 
     pagCollector.on('collect', async subI => {
         if (subI.user.id !== interaction.user.id) return subI.reply({ content: 'Use seu próprio comando!', ephemeral: true });
@@ -192,7 +211,8 @@ async function handlePagination(interaction, logs, targetUser) {
             page++;
             await subI.update({ embeds: [generateEmbed(page)], components: [getButtons(page)] });
         } else if (subI.customId === 'voltar_perfil') {
-            pagCollector.stop();
+            pagCollector.stop(); 
+            // O update de voltar é tratado no coletor principal do execute
         }
     });
 }
