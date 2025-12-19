@@ -810,18 +810,17 @@ const schema = {
         guild_id: { type: 'VARCHAR(255)', notNull: true },
         used_at: { type: 'TIMESTAMP WITH TIME ZONE', default: 'NOW()' }
     },
-/// --- KODA SOCIAL PROFILES ---
+// --- KODA SOCIAL PROFILES ---
     user_profiles: {
         user_id: { type: 'VARCHAR(255)', primaryKey: true },
-        bio: { type: 'TEXT', default: "'Um usuário misterioso do Koda...'" }, // Tente manter aspas simples DENTRO de aspas duplas para o SQL LITERAL
-        theme_color: { type: 'VARCHAR(255)', default: "'#5865F2'" },
+        bio: { type: 'TEXT' }, 
+        theme_color: { type: 'VARCHAR(255)' },
         theme_image: { type: 'TEXT' },
         last_updated: { type: 'TIMESTAMP WITH TIME ZONE', default: 'NOW()' }
     },
 
-  // --- SISTEMA DE RANKING DE VOZ KODA ---
+    // --- SISTEMA DE RANKING DE VOZ KODA ---
     user_voice_data: {
-        // user_id + guild_id formam a chave única lógica
         guild_id: { type: 'VARCHAR(255)', notNull: true },
         user_id: { type: 'VARCHAR(255)', notNull: true },
         voice_time_mins: { type: 'INTEGER', default: 0 },
@@ -829,12 +828,13 @@ const schema = {
         level: { type: 'INTEGER', default: 0 },
         last_update: { type: 'TIMESTAMP', default: 'NOW()' }
     },
+    
     guild_level_rewards: {
         id: { type: 'SERIAL', primaryKey: true },
         guild_id: { type: 'VARCHAR(255)', notNull: true },
         level: { type: 'INTEGER', notNull: true },
         role_id: { type: 'VARCHAR(255)', notNull: true },
-        role_name: { type: 'VARCHAR(100)' } // Ex: "Ouro"
+        role_name: { type: 'VARCHAR(100)' }
     },
     // --- VOICE HUBS & TEMP CHANNELS ---
     voice_hubs: {
