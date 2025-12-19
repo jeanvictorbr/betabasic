@@ -23,6 +23,7 @@ const { syncUsedKeys } = require('./utils/keyStockMonitor.js');
 const { logInteraction } = require('./utils/analyticsUtils.js');
 const MODULES = require('./config/modules.js');
 const { updateModuleStatusCache } = require('./utils/moduleStatusCache.js');
+const startVoiceMonitor = require('./utils/voiceMonitor.js');
 const { splitMessage } = require('./utils/messageSplitter'); //
 const { startStatsMonitor } = require('./utils/statsMonitor.js');
 const { startVerificationLoop } = require('./utils/verificationLoop'); // <--- ADICIONE IS
@@ -356,6 +357,9 @@ console.log('--- Handlers Carregados ---');
 
 
 client.once(Events.ClientReady, async () => {
+
+    startVoiceMonitor(client);
+console.log('🎙️ Monitor de Voz iniciado.');
     startPontoUpdateLoop(client);
     startGiveawayMonitor(client);
     startVerificationLoop(client);
