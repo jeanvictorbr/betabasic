@@ -810,10 +810,10 @@ const schema = {
         guild_id: { type: 'VARCHAR(255)', notNull: true },
         used_at: { type: 'TIMESTAMP WITH TIME ZONE', default: 'NOW()' }
     },
-// --- KODA SOCIAL PROFILES ---
+/// --- KODA SOCIAL PROFILES ---
     user_profiles: {
         user_id: { type: 'VARCHAR(255)', primaryKey: true },
-        bio: { type: 'TEXT', default: "'Um usuário misterioso do Koda...'" },
+        bio: { type: 'TEXT', default: "'Um usuário misterioso do Koda...'" }, // Tente manter aspas simples DENTRO de aspas duplas para o SQL LITERAL
         theme_color: { type: 'VARCHAR(255)', default: "'#5865F2'" },
         theme_image: { type: 'TEXT' },
         last_updated: { type: 'TIMESTAMP WITH TIME ZONE', default: 'NOW()' }

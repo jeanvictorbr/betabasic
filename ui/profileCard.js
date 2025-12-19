@@ -1,7 +1,5 @@
-// ui/profileCard.js
-const { format } = require('date-fns');
-const { ptBR } = require('date-fns/locale');
 const createProgressBar = require('../utils/progressBar.js');
+const { time } = require('discord.js');
 
 /**
  * Gera o JSON do Perfil V2
@@ -10,23 +8,36 @@ const createProgressBar = require('../utils/progressBar.js');
  */
 module.exports = (member, profileData) => {
     const user = member.user;
-    const themeColor = profileData.theme_color ? parseInt(profileData.theme_color.replace('#', ''), 16) : 0x5865F2;
     
-    // Simulação de Nível (Substitua pela sua lógica real de XP se tiver)
-    // Aqui usamos dias de conta como "XP" para exemplo
+    // Tratamento de cor: garante que é um inteiro ou string hex válida
+    let themeColor = 0x5865F2;
+    if (profileData.theme_color) {
+        // Remove aspas extras que podem ter vindo do DB por causa do erro anterior
+        let cleanColor = profileData.theme_color.replace(/['"]/g, '');
+        if (cleanColor.startsWith('#')) {
+            themeColor = parseInt(cleanColor.replace('#', ''), 16);
+        }
+    }
+    
+    // Simulação de Nível (Dias de conta)
     const accountAgeDays = Math.floor((Date.now() - user.createdTimestamp) / (1000 * 60 * 60 * 24));
     const level = Math.floor(accountAgeDays / 30);
-    const nextLevelXp = (level + 1) * 30;
     const progressBar = createProgressBar(accountAgeDays % 30, 30, 8);
 
-    // Datas formatadas
-    const joinedAt = format(member.joinedAt, "dd 'de' MMM 'de' yyyy", { locale: ptBR });
-    const createdAt = format(user.createdAt, "dd 'de' MMM 'de' yyyy", { locale: ptBR });
+    // Formatação de data nativa do Discord (User Friendly)
+    const joinedAtDisplay = member.joinedAt ? time(member.joinedAt, 'D') : 'N/A';
+    const createdAtDisplay = time(user.createdAt, 'D');
+
+    // Remove aspas extras da Bio se existirem
+    let bioText = profileData.bio || 'Sem bio definida.';
+    if (bioText.startsWith("'") && bioText.endsWith("'")) {
+        bioText = bioText.slice(1, -1);
+    }
 
     const embed = {
         type: 'rich',
         title: `Perfil de ${user.username}`,
-        description: `> *${profileData.bio || 'Sem bio definida.'}*`,
+        description: `> *${bioText}*`,
         color: themeColor,
         thumbnail: {
             url: user.displayAvatarURL({ dynamic: true, size: 256 })
@@ -39,18 +50,18 @@ module.exports = (member, profileData) => {
             },
             {
                 name: '📅 Marcos Temporais',
-                value: `**Entrou:** ${joinedAt}\n**Criou:** ${createdAt}`,
+                value: `**Entrou:** ${joinedAtDisplay}\n**Criou:** ${createdAtDisplay}`,
                 inline: true
             },
             {
-                name: `🆙 Nível ${level}`,
+                name: `🆙 Nível ${level} (Veterania)`,
                 value: `\`${progressBar}\` ${(accountAgeDays % 30)}/30 XP`,
                 inline: false
             }
         ],
         footer: {
             text: `Koda Profiles • Solicitado por ${user.username}`,
-            icon_url: 'https://cdn.discordapp.com/emojis/1056902047863509062.png' // Ícone genérico ou do bot
+            icon_url: user.displayAvatarURL()
         }
     };
 
@@ -59,8 +70,6 @@ module.exports = (member, profileData) => {
         embed.image = { url: profileData.theme_image };
     }
 
-    // Componentes (Botão de Editar) - Apenas se for o próprio usuário vendo (tratado no handler)
-    // Mas retornamos a estrutura base aqui.
     const components = [
         {
             type: 1, // ActionRow
