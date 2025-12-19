@@ -836,6 +836,14 @@ const schema = {
         role_id: { type: 'VARCHAR(255)', notNull: true },
         role_name: { type: 'VARCHAR(100)' }
     },
+    // --- SISTEMA DE REPUTAÇÃO / ELOGIOS ---
+    user_reputation: {
+        id: { type: 'SERIAL', primaryKey: true },
+        target_id: { type: 'VARCHAR(255)', notNull: true }, // Quem recebeu
+        author_id: { type: 'VARCHAR(255)', notNull: true }, // Quem enviou
+        message: { type: 'TEXT', notNull: true },
+        created_at: { type: 'TIMESTAMP', default: 'NOW()' }
+    },
     // --- VOICE HUBS & TEMP CHANNELS ---
     voice_hubs: {
         guild_id: { type: 'VARCHAR(255)', primaryKey: true },
