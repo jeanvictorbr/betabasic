@@ -810,40 +810,7 @@ const schema = {
         guild_id: { type: 'VARCHAR(255)', notNull: true },
         used_at: { type: 'TIMESTAMP WITH TIME ZONE', default: 'NOW()' }
     },
-// --- KODA SOCIAL PROFILES ---
-    user_profiles: {
-        user_id: { type: 'VARCHAR(255)', primaryKey: true },
-        bio: { type: 'TEXT' }, 
-        theme_color: { type: 'VARCHAR(255)' },
-        theme_image: { type: 'TEXT' },
-        last_updated: { type: 'TIMESTAMP WITH TIME ZONE', default: 'NOW()' }
-    },
 
-    // --- SISTEMA DE RANKING DE VOZ KODA ---
-    user_voice_data: {
-        guild_id: { type: 'VARCHAR(255)', notNull: true },
-        user_id: { type: 'VARCHAR(255)', notNull: true },
-        voice_time_mins: { type: 'INTEGER', default: 0 },
-        xp: { type: 'INTEGER', default: 0 },
-        level: { type: 'INTEGER', default: 0 },
-        last_update: { type: 'TIMESTAMP', default: 'NOW()' }
-    },
-    
-    guild_level_rewards: {
-        id: { type: 'SERIAL', primaryKey: true },
-        guild_id: { type: 'VARCHAR(255)', notNull: true },
-        level: { type: 'INTEGER', notNull: true },
-        role_id: { type: 'VARCHAR(255)', notNull: true },
-        role_name: { type: 'VARCHAR(100)' }
-    },
-    // --- SISTEMA DE REPUTAÇÃO / ELOGIOS ---
-    user_reputation: {
-        id: { type: 'SERIAL', primaryKey: true },
-        target_id: { type: 'VARCHAR(255)', notNull: true }, // Quem recebeu
-        author_id: { type: 'VARCHAR(255)', notNull: true }, // Quem enviou
-        message: { type: 'TEXT', notNull: true },
-        created_at: { type: 'TIMESTAMP', default: 'NOW()' }
-    },
     // --- VOICE HUBS & TEMP CHANNELS ---
     voice_hubs: {
         guild_id: { type: 'VARCHAR(255)', primaryKey: true },
@@ -860,7 +827,6 @@ const schema = {
         is_hidden: { type: 'BOOLEAN', default: false },
         created_at: { type: 'TIMESTAMPTZ', default: 'NOW()' }
     }
-
 };
 
 module.exports = schema;
