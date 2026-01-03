@@ -5,22 +5,21 @@ module.exports = {
     customId: 'util_eb_start',
     execute: async (interaction) => {
         try {
-            // Estado Inicial
             const initialState = {
-                accent_color: 0x5865F2, // Começa com Blurple
+                accent_color: 0x5865F2, 
                 items: [
-                    { type: 'header', content: 'Título do Container' },
-                    { type: 'text', content: 'Exemplo de texto. Use os menus abaixo para adicionar mais conteúdo.' }
+                    { type: 'header', content: 'Novo Container' },
+                    { type: 'text', content: 'Exemplo de texto. A barra ao lado indica a cor.' }
                 ]
             };
 
-            // Salva na memória
+            // Inicia o cache na memória
             if (!interaction.client.containerState) interaction.client.containerState = new Map();
             interaction.client.containerState.set(interaction.user.id, initialState);
 
             const payload = containerBuilderPanel(initialState);
             
-            // ATENÇÃO: .reply() aqui para criar uma nova mensagem limpa V2
+            // Usa .reply para criar nova mensagem V2
             await interaction.reply({ ...payload.body, ephemeral: true });
             
         } catch (error) {
