@@ -13,8 +13,11 @@ module.exports = {
             };
             
             const payload = embedBuilderPanel(initialEmbed);
-            // ✅ CORREÇÃO: Enviar apenas o body
-            await interaction.update(payload.body);
+            
+            // ✅ CORREÇÃO: Passamos o payload DIRETAMENTE (sem .body), pois removemos o wrapper V2
+            // Isso força o Discord a converter a mensagem para o tipo padrão que suporta Embeds.
+            await interaction.update(payload);
+            
         } catch (error) {
             console.error("Erro ao iniciar builder:", error);
             if (!interaction.replied) await interaction.reply({ content: "❌ Erro ao abrir o builder.", ephemeral: true });
