@@ -1,77 +1,84 @@
 // File: ui/utilities/containerBuilderPanel.js
-// Flags V2
-const V2_FLAG = 1 << 15; 
+const { V2_FLAG } = require('../../utils/constants');
 
 module.exports = (data) => {
-    // Estado padrão do Container
-    const containerState = data || {
-        accessoryLabel: "Clique Aqui",
-        accessoryStyle: 1, // 1: Primary, 2: Secondary, 3: Success, 4: Danger
-        title: "Título do Container",
-        description: "Descrição do container V2.",
-        emoji: "🚀"
-    };
-
-    // Preparação do emoji (Evita erro se for null)
-    const accessoryObj = {
-        type: 2, // Button Accessory
-        style: containerState.accessoryStyle,
-        label: containerState.accessoryLabel,
-        custom_id: "preview_action_disabled",
-        disabled: true // Botão de preview não faz nada
-    };
-
-    // Só adiciona a propriedade emoji se ela existir
-    if (containerState.emoji) {
-        accessoryObj.emoji = { name: containerState.emoji };
-    }
-
-    // Constrói o Container V2 (Type 9) para o Preview
-    const previewContainer = {
-        type: 9, // Container V2
-        accessory: accessoryObj,
-        components: [
-            { type: 10, content: `**${containerState.title}**` }, // Título em Negrito
-            { type: 10, content: containerState.description }      // Descrição
+    // Estado inicial se estiver vazio
+    const state = data || {
+        items: [
+            { type: 'header', content: 'Título do Container' },
+            { type: 'text_bar', content: 'Este texto tem uma barra lateral simulada usando Markdown.\nFica parecendo um embed moderno.' }
         ]
     };
 
+    // Constrói os componentes visuais baseados na lista de itens
+    const previewComponents = state.items.map((item, index) => {
+        if (item.type === 'header') {
+            return { type: 10, content: `## ${item.content}` }; // Markdown de Título Grande
+        }
+        if (item.type === 'text_bar') {
+            return { type: 10, content: `> ${item.content}` }; // Markdown de Barra Lateral (Blockquote)
+        }
+        if (item.type === 'text_raw') {
+            return { type: 10, content: item.content }; // Texto normal
+        }
+        if (item.type === 'divider') {
+            return { type: 10, content: "─────────────────────────" }; // Divisória Visual
+        }
+        if (item.type === 'spacer') {
+            return { type: 10, content: " " }; // Espaço vazio
+        }
+        if (item.type === 'image' && item.url) {
+            // Nota: Imagens em V2 são tratadas como attachments ou links, 
+            // aqui simulamos a linha da imagem ou usamos o recurso de MessageFlag se suportado.
+            // Para simplicidade visual no preview de texto:
+            return { type: 10, content: `🖼️ **[Imagem Anexada]**\n(${item.url})` };
+        }
+        return { type: 10, content: `[Item Desconhecido]` };
+    });
+
+    // Adiciona limites para não quebrar a API (max 10 componentes por mensagem no preview)
+    const safePreview = previewComponents.slice(0, 8); 
+
     return {
-        type: 17, // Interface V2
+        type: 17,
         body: {
             type: 1,
             flags: V2_FLAG,
             components: [
-                // 1. Cabeçalho
-                { type: 10, content: "🛠️ **Editor de Containers V2**\nVeja o preview abaixo e use os botões para editar." },
+                { type: 10, content: "🛠️ **Construtor de Containers V2 (Geração 2.0)**\nAdicione elementos usando o menu abaixo." },
+                { type: 10, content: " " }, // Espaço
                 
-                // 2. O PREVIEW (O Container em si)
-                previewContainer,
-                
-                // 3. Separador visual (CORRIGIDO: Texto visível para evitar erro de length)
-                { type: 10, content: "─────────────────────────" }, 
+                // --- ÁREA DE PREVIEW ---
+                ...safePreview,
+                // -----------------------
 
-                // 4. Controles de Edição
+                { type: 10, content: " " },
+                { type: 10, content: "⚙️ **Controles de Edição**" },
+                
+                // Menu de Adicionar Componentes
                 {
-                    type: 1, // Linha de Botões
-                    components: [
-                        { type: 2, style: 2, label: "Editar Título", emoji: { name: "📝" }, custom_id: "util_cb_edit_title" },
-                        { type: 2, style: 2, label: "Editar Descrição", emoji: { name: "📄" }, custom_id: "util_cb_edit_desc" },
-                        { type: 2, style: 2, label: "Botão (Acessório)", emoji: { name: "🔘" }, custom_id: "util_cb_edit_btn" }
-                    ]
+                    type: 1,
+                    components: [{
+                        type: 3, // String Select
+                        custom_id: "util_cb_add_select",
+                        placeholder: "➕ Adicionar Elemento ao Container...",
+                        options: [
+                            { label: "Título Grande (##)", value: "add_header", description: "Texto grande e em negrito.", emoji: { name: "Tb" } },
+                            { label: "Texto com Barra (>)", value: "add_text_bar", description: "Simula a barra lateral de citação.", emoji: { name: "▎" } },
+                            { label: "Texto Normal", value: "add_text_raw", description: "Texto simples sem formatação.", emoji: { name: "📄" } },
+                            { label: "Divisória", value: "add_divider", description: "Linha separadora.", emoji: { name: "➖" } },
+                            { label: "Espaço em Branco", value: "add_spacer", description: "Pula uma linha.", emoji: { name: "⬛" } },
+                            { label: "Imagem (URL)", value: "add_image", description: "Adiciona uma imagem via Link.", emoji: { name: "🖼️" } }
+                        ]
+                    }]
                 },
+                
+                // Menu de Ações (Limpar/Remover Último)
                 {
-                    type: 1, // Linha de Estilo
+                    type: 1,
                     components: [
-                        { type: 2, style: 1, label: "Azul", custom_id: "util_cb_style_1" },
-                        { type: 2, style: 2, label: "Cinza", custom_id: "util_cb_style_2" },
-                        { type: 2, style: 3, label: "Verde", custom_id: "util_cb_style_3" },
-                        { type: 2, style: 4, label: "Vermelho", custom_id: "util_cb_style_4" }
-                    ]
-                },
-                {
-                    type: 1, // Linha de Ação
-                    components: [
+                        { type: 2, style: 2, label: "Remover Último", emoji: { name: "↩️" }, custom_id: "util_cb_undo" },
+                        { type: 2, style: 4, label: "Limpar Tudo", emoji: { name: "🗑️" }, custom_id: "util_cb_clear" },
                         { type: 2, style: 3, label: "Enviar Container", emoji: { name: "🚀" }, custom_id: "util_cb_send" },
                         { type: 2, style: 2, label: "Voltar", emoji: { name: "⬅️" }, custom_id: "config_open_utilities" }
                     ]

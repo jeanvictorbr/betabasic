@@ -1,16 +1,10 @@
 // File: handlers/buttons/util_cb_send.js
-const { EPHEMERAL_FLAG } = require('../../utils/constants');
+const { EPHEMERAL_FLAG, V2_FLAG } = require('../../utils/constants');
 
 module.exports = {
     customId: 'util_cb_send',
     execute: async (interaction) => {
-        // Extrai o estado final do container da mensagem
-        const previewComp = interaction.message.components[1];
-        
-        // Salva na memoria temporária
-        if (!interaction.client.containerDrafts) interaction.client.containerDrafts = new Map();
-        interaction.client.containerDrafts.set(interaction.user.id, previewComp);
-
+        // Pede o canal via Select Menu V2
         const selectMenu = {
             type: 17,
             body: {
@@ -20,14 +14,13 @@ module.exports = {
                     type: 1,
                     components: [{
                         type: 8, // Channel Select
-                        custom_id: "util_cb_confirm_send",
+                        custom_id: "util_cb_confirm_send_v2",
                         channel_types: [0, 5],
-                        placeholder: "Selecione o canal para enviar o Container..."
+                        placeholder: "Selecione onde enviar o Container..."
                     }]
                 }]
             }
         };
-        
         await interaction.reply(selectMenu.body);
     }
 };

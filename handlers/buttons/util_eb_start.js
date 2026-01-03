@@ -5,18 +5,19 @@ module.exports = {
     customId: 'util_eb_start',
     execute: async (interaction) => {
         try {
-            // Estado inicial limpo
+            // Estado inicial limpo V2
             const initialState = {
-                accessoryLabel: "Ação",
-                accessoryStyle: 1,
-                title: "Novo Container V2",
-                description: "Edite este texto usando os controles abaixo.",
-                emoji: "⭐"
+                items: [
+                    { type: 'header', content: 'Novo Container V2' },
+                    { type: 'text_bar', content: 'Edite este conteúdo usando o menu de seleção abaixo.\nUse a opção "Texto com Barra" para este visual.' }
+                ]
             };
 
+            // Salva estado inicial na memória para persistência rápida
+            if (!interaction.client.containerState) interaction.client.containerState = new Map();
+            interaction.client.containerState.set(interaction.user.id, initialState);
+
             const payload = containerBuilderPanel(initialState);
-            
-            // Enviando .body (Correto para V2)
             await interaction.update(payload.body);
             
         } catch (error) {
