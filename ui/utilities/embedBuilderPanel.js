@@ -1,20 +1,18 @@
 // File: ui/utilities/embedBuilderPanel.js
 module.exports = (currentEmbed) => {
-    // Estado inicial padrão se nenhum embed for passado
     const previewEmbed = currentEmbed || {
         title: "Título do Container",
-        description: "Este é um exemplo de descrição.\nClique nos botões abaixo para editar cada parte.",
-        color: 0x5865F2, // Blurple
-        footer: { text: "BasicFlow Builder" }
+        description: "Descrição padrão.",
+        color: 0x5865F2
     };
 
     return {
-        // MENSAGEM PADRÃO (Sem V2_FLAG para permitir Embeds)
-        content: "🛠️ **Editor de Containers**\nEdite o conteúdo e veja o resultado em tempo real abaixo.",
+        // Mensagem padrão (suporta embeds)
+        content: "🛠️ **Editor de Containers**\nUse os botões para editar. O resultado aparece abaixo em tempo real.",
         embeds: [previewEmbed],
         components: [
             {
-                type: 1, // ActionRow 1: Texto e Cor
+                type: 1, 
                 components: [
                     { type: 2, style: 2, label: "Editar Título", emoji: { name: "📝" }, custom_id: "util_eb_edit_title" },
                     { type: 2, style: 2, label: "Editar Descrição", emoji: { name: "📄" }, custom_id: "util_eb_edit_description" },
@@ -22,7 +20,7 @@ module.exports = (currentEmbed) => {
                 ]
             },
             {
-                type: 1, // ActionRow 2: Imagens e Rodapé
+                type: 1, 
                 components: [
                     { type: 2, style: 2, label: "Imagem Grande", emoji: { name: "🖼️" }, custom_id: "util_eb_edit_image" },
                     { type: 2, style: 2, label: "Thumbnail", emoji: { name: "📷" }, custom_id: "util_eb_edit_thumbnail" },
@@ -30,18 +28,19 @@ module.exports = (currentEmbed) => {
                 ]
             },
             {
-                type: 1, // ActionRow 3: Campos (Fields)
+                type: 1, 
                 components: [
                     { type: 2, style: 1, label: "Add Campo", emoji: { name: "➕" }, custom_id: "util_eb_field_add" },
                     { type: 2, style: 2, label: "Remover Último", emoji: { name: "➖" }, custom_id: "util_eb_field_rem" },
-                    { type: 2, style: 4, label: "Limpar Tudo", emoji: { name: "🗑️" }, custom_id: "util_eb_clear_all" }
+                    { type: 2, style: 2, label: "Limpar Tudo", emoji: { name: "🗑️" }, custom_id: "util_eb_clear_all" }
                 ]
             },
             {
-                type: 1, // ActionRow 4: Navegação
+                type: 1, 
                 components: [
                     { type: 2, style: 3, label: "Enviar para Canal", emoji: { name: "🚀" }, custom_id: "util_eb_send_start" },
-                    { type: 2, style: 2, label: "Voltar", emoji: { name: "⬅️" }, custom_id: "config_open_utilities" }
+                    // O botão Voltar agora fecha essa mensagem, já que ela é uma "nova janela"
+                    { type: 2, style: 4, label: "Fechar Editor", emoji: { name: "✖️" }, custom_id: "delete_ephemeral_reply" }
                 ]
             }
         ]
