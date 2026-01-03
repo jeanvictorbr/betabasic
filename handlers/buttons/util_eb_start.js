@@ -2,12 +2,12 @@
 const containerBuilderPanel = require('../../ui/utilities/containerBuilderPanel.js');
 
 module.exports = {
-    customId: 'util_eb_start', // Mantive o ID do botão do menu anterior
+    customId: 'util_eb_start',
     execute: async (interaction) => {
         try {
             // Estado inicial limpo
             const initialState = {
-                accessoryLabel: "Botão Ação",
+                accessoryLabel: "Ação",
                 accessoryStyle: 1,
                 title: "Novo Container V2",
                 description: "Edite este texto usando os controles abaixo.",
@@ -16,7 +16,7 @@ module.exports = {
 
             const payload = containerBuilderPanel(initialState);
             
-            // Resposta V2 correta
+            // Enviando .body (Correto para V2)
             await interaction.update(payload.body);
             
         } catch (error) {

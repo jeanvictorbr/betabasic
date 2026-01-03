@@ -1,5 +1,6 @@
 // File: ui/utilities/containerBuilderPanel.js
-const { V2_FLAG } = require('../../utils/constants');
+// Flags V2
+const V2_FLAG = 1 << 15; 
 
 module.exports = (data) => {
     // Estado padrão do Container
@@ -11,16 +12,24 @@ module.exports = (data) => {
         emoji: "🚀"
     };
 
+    // Preparação do emoji (Evita erro se for null)
+    const accessoryObj = {
+        type: 2, // Button Accessory
+        style: containerState.accessoryStyle,
+        label: containerState.accessoryLabel,
+        custom_id: "preview_action_disabled",
+        disabled: true // Botão de preview não faz nada
+    };
+
+    // Só adiciona a propriedade emoji se ela existir
+    if (containerState.emoji) {
+        accessoryObj.emoji = { name: containerState.emoji };
+    }
+
     // Constrói o Container V2 (Type 9) para o Preview
     const previewContainer = {
         type: 9, // Container V2
-        accessory: {
-            type: 2, // Button Accessory
-            style: containerState.accessoryStyle,
-            label: containerState.accessoryLabel,
-            emoji: { name: containerState.emoji },
-            custom_id: "preview_action_disabled" // Ação desabilitada no preview
-        },
+        accessory: accessoryObj,
         components: [
             { type: 10, content: `**${containerState.title}**` }, // Título em Negrito
             { type: 10, content: containerState.description }      // Descrição
@@ -39,8 +48,8 @@ module.exports = (data) => {
                 // 2. O PREVIEW (O Container em si)
                 previewContainer,
                 
-                // 3. Separador visual
-                { type: 10, content: " " }, 
+                // 3. Separador visual (CORRIGIDO: Texto visível para evitar erro de length)
+                { type: 10, content: "─────────────────────────" }, 
 
                 // 4. Controles de Edição
                 {
@@ -54,7 +63,7 @@ module.exports = (data) => {
                 {
                     type: 1, // Linha de Estilo
                     components: [
-                        { type: 2, style: 1, label: "Estilo: Azul", custom_id: "util_cb_style_1" },
+                        { type: 2, style: 1, label: "Azul", custom_id: "util_cb_style_1" },
                         { type: 2, style: 2, label: "Cinza", custom_id: "util_cb_style_2" },
                         { type: 2, style: 3, label: "Verde", custom_id: "util_cb_style_3" },
                         { type: 2, style: 4, label: "Vermelho", custom_id: "util_cb_style_4" }
