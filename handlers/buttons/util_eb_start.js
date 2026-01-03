@@ -5,20 +5,23 @@ module.exports = {
     customId: 'util_eb_start',
     execute: async (interaction) => {
         try {
-            // Estado inicial limpo V2
+            // Estado Inicial
             const initialState = {
+                accent_color: 0x5865F2, // Começa com Blurple
                 items: [
-                    { type: 'header', content: 'Novo Container V2' },
-                    { type: 'text_bar', content: 'Edite este conteúdo usando o menu de seleção abaixo.\nUse a opção "Texto com Barra" para este visual.' }
+                    { type: 'header', content: 'Título do Container' },
+                    { type: 'text', content: 'Exemplo de texto. Use os menus abaixo para adicionar mais conteúdo.' }
                 ]
             };
 
-            // Salva estado inicial na memória para persistência rápida
+            // Salva na memória
             if (!interaction.client.containerState) interaction.client.containerState = new Map();
             interaction.client.containerState.set(interaction.user.id, initialState);
 
             const payload = containerBuilderPanel(initialState);
-            await interaction.update(payload.body);
+            
+            // ATENÇÃO: .reply() aqui para criar uma nova mensagem limpa V2
+            await interaction.reply({ ...payload.body, ephemeral: true });
             
         } catch (error) {
             console.error("Erro ao iniciar Container Builder:", error);

@@ -6,12 +6,10 @@ module.exports = {
     customId: 'util_cb_add_select',
     execute: async (interaction) => {
         const selected = interaction.values[0];
-        
-        // Recupera estado da memória
         let currentState = interaction.client.containerState?.get(interaction.user.id);
-        if (!currentState) currentState = { items: [] };
+        if (!currentState) currentState = { accent_color: 0x5865F2, items: [] };
 
-        // 1. Ações imediatas (não precisam de digitar)
+        // 1. Itens automáticos (sem modal)
         if (selected === 'add_divider') {
             currentState.items.push({ type: 'divider' });
             interaction.client.containerState.set(interaction.user.id, currentState);
@@ -23,23 +21,21 @@ module.exports = {
             return await interaction.update(containerBuilderPanel(currentState).body);
         }
 
-        // 2. Ações que exigem Modal (Texto, Título, Imagem)
+        // 2. Itens que precisam de Modal
         let modalTitle = "Adicionar Conteúdo";
-        let inputLabel = "Texto";
-        let modalId = "util_cb_modal_add"; // Handler genérico para o modal
+        let label = "Texto";
+        
+        interaction.client.tempContainerAction = selected; // Salva o tipo temporariamente
 
-        // Salva o TIPO que estamos adicionando temporariamente no client para o modal saber
-        interaction.client.tempType = selected; 
+        if (selected === 'add_header') { modalTitle = "Novo Título"; label = "Digite o título:"; }
+        if (selected === 'add_text') { modalTitle = "Novo Texto"; label = "Digite o conteúdo:"; }
+        if (selected === 'add_image') { modalTitle = "Adicionar Imagem"; label = "URL da Imagem:"; }
 
-        if (selected === 'add_header') { modalTitle = "Novo Título (##)"; inputLabel = "Digite o título"; }
-        if (selected === 'add_text_bar') { modalTitle = "Texto com Barra (>)"; inputLabel = "Digite o conteúdo"; }
-        if (selected === 'add_image') { modalTitle = "Adicionar Imagem"; inputLabel = "Cole a URL da imagem (https://...)"; }
-
-        const modal = new ModalBuilder().setCustomId(modalId).setTitle(modalTitle);
+        const modal = new ModalBuilder().setCustomId('util_cb_modal_add').setTitle(modalTitle);
         const input = new TextInputBuilder()
-            .setCustomId('content_input')
-            .setLabel(inputLabel)
-            .setStyle(selected === 'add_image' ? TextInputStyle.Short : TextInputStyle.Paragraph)
+            .setCustomId('input_val')
+            .setLabel(label)
+            .setStyle(selected === 'add_text' ? TextInputStyle.Paragraph : TextInputStyle.Short)
             .setRequired(true);
 
         modal.addComponents(new ActionRowBuilder().addComponents(input));

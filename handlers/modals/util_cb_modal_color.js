@@ -1,15 +1,20 @@
-// File: handlers/buttons/util_cb_actions.js (ou o nome que você usou antes)
+// File: handlers/modals/util_cb_modal_color.js
 const containerBuilderPanel = require('../../ui/utilities/containerBuilderPanel.js');
 
 module.exports = {
-    customId: 'util_cb_', // Catch-all
+    customId: 'util_cb_modal_color',
     execute: async (interaction) => {
-        const action = interaction.customId;
+        let hex = interaction.fields.getTextInputValue('hex_input');
+        if (!hex.startsWith('#')) hex = '#' + hex;
+
         let currentState = interaction.client.containerState?.get(interaction.user.id);
         if (!currentState) currentState = { accent_color: 0x5865F2, items: [] };
 
-        if (action === 'util_cb_undo') currentState.items.pop();
-        if (action === 'util_cb_clear') currentState.items = [];
+        try {
+            currentState.accent_color = parseInt(hex.replace('#', ''), 16);
+        } catch (e) {
+            // Se falhar, mantém a atual
+        }
 
         interaction.client.containerState.set(interaction.user.id, currentState);
         await interaction.update(containerBuilderPanel(currentState).body);
