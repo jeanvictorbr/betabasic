@@ -1,23 +1,20 @@
 // File: ui/utilities/embedBuilderPanel.js
-// NOTA: Não usamos V2_FLAG aqui porque a API do Discord PROÍBE 'embeds' dentro de interfaces V2.
-// Para ter o "Preview em Tempo Real", precisamos usar o formato padrão de mensagem.
-
 module.exports = (currentEmbed) => {
-    // Garante que o embed seja um objeto válido
+    // Estado inicial padrão se nenhum embed for passado
     const previewEmbed = currentEmbed || {
-        title: "Título do Embed",
-        description: "Esta é a descrição do seu embed. Clique nos botões abaixo para editar.",
-        color: 0x2B2D31, 
+        title: "Título do Container",
+        description: "Este é um exemplo de descrição.\nClique nos botões abaixo para editar cada parte.",
+        color: 0x5865F2, // Blurple
+        footer: { text: "BasicFlow Builder" }
     };
 
     return {
-        // NÃO TEM type: 17
-        // NÃO TEM body: { ... }
-        content: "🎨 **Criador de Containers**\nEdite o conteúdo abaixo. O resultado é atualizado em tempo real.",
+        // MENSAGEM PADRÃO (Sem V2_FLAG para permitir Embeds)
+        content: "🛠️ **Editor de Containers**\nEdite o conteúdo e veja o resultado em tempo real abaixo.",
         embeds: [previewEmbed],
         components: [
             {
-                type: 1, // Linha 1
+                type: 1, // ActionRow 1: Texto e Cor
                 components: [
                     { type: 2, style: 2, label: "Editar Título", emoji: { name: "📝" }, custom_id: "util_eb_edit_title" },
                     { type: 2, style: 2, label: "Editar Descrição", emoji: { name: "📄" }, custom_id: "util_eb_edit_description" },
@@ -25,23 +22,23 @@ module.exports = (currentEmbed) => {
                 ]
             },
             {
-                type: 1, // Linha 2
+                type: 1, // ActionRow 2: Imagens e Rodapé
                 components: [
-                    { type: 2, style: 2, label: "Definir Imagem", emoji: { name: "🖼️" }, custom_id: "util_eb_edit_image" },
+                    { type: 2, style: 2, label: "Imagem Grande", emoji: { name: "🖼️" }, custom_id: "util_eb_edit_image" },
                     { type: 2, style: 2, label: "Thumbnail", emoji: { name: "📷" }, custom_id: "util_eb_edit_thumbnail" },
                     { type: 2, style: 2, label: "Autor/Rodapé", emoji: { name: "👤" }, custom_id: "util_eb_edit_meta" }
                 ]
             },
             {
-                type: 1, // Linha 3
+                type: 1, // ActionRow 3: Campos (Fields)
                 components: [
-                    { type: 2, style: 1, label: "Adicionar Campo", emoji: { name: "➕" }, custom_id: "util_eb_field_add" },
-                    { type: 2, style: 4, label: "Remover Último Campo", emoji: { name: "➖" }, custom_id: "util_eb_field_rem" },
-                    { type: 2, style: 2, label: "Limpar Tudo", emoji: { name: "🗑️" }, custom_id: "util_eb_clear_all" }
+                    { type: 2, style: 1, label: "Add Campo", emoji: { name: "➕" }, custom_id: "util_eb_field_add" },
+                    { type: 2, style: 2, label: "Remover Último", emoji: { name: "➖" }, custom_id: "util_eb_field_rem" },
+                    { type: 2, style: 4, label: "Limpar Tudo", emoji: { name: "🗑️" }, custom_id: "util_eb_clear_all" }
                 ]
             },
             {
-                type: 1, // Linha 4
+                type: 1, // ActionRow 4: Navegação
                 components: [
                     { type: 2, style: 3, label: "Enviar para Canal", emoji: { name: "🚀" }, custom_id: "util_eb_send_start" },
                     { type: 2, style: 2, label: "Voltar", emoji: { name: "⬅️" }, custom_id: "config_open_utilities" }

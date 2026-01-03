@@ -5,22 +5,25 @@ module.exports = {
     customId: 'util_eb_start',
     execute: async (interaction) => {
         try {
+            // Define o embed inicial
             const initialEmbed = {
-                title: "Título do Novo Container",
-                description: "Clique nos botões abaixo para começar a editar este conteúdo.",
-                color: 0x5865F2, 
-                footer: { text: "Criado via BasicFlow Builder" }
+                title: "Novo Container",
+                description: "Edite este container usando os botões abaixo.",
+                color: 0x5865F2,
+                footer: { text: "Criado com BasicFlow" }
             };
-            
+
+            // Gera o payload (Objeto de mensagem padrão)
             const payload = embedBuilderPanel(initialEmbed);
-            
-            // ✅ CORREÇÃO: Passamos o payload DIRETAMENTE (sem .body), pois removemos o wrapper V2
-            // Isso força o Discord a converter a mensagem para o tipo padrão que suporta Embeds.
+
+            // IMPORTANTE: Ao usar update() aqui sem flags, o Discord substitui a mensagem V2 anterior
+            // por esta mensagem padrão que suporta Embeds.
             await interaction.update(payload);
-            
         } catch (error) {
-            console.error("Erro ao iniciar builder:", error);
-            if (!interaction.replied) await interaction.reply({ content: "❌ Erro ao abrir o builder.", ephemeral: true });
+            console.error("Erro ao iniciar editor:", error);
+            if (!interaction.replied) {
+                await interaction.reply({ content: "❌ Erro ao abrir o editor.", ephemeral: true });
+            }
         }
     }
 };

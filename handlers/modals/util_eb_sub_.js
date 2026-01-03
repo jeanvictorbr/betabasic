@@ -2,38 +2,44 @@
 const embedBuilderPanel = require('../../ui/utilities/embedBuilderPanel.js');
 
 module.exports = {
-    customId: 'util_eb_sub_',
+    customId: 'util_eb_sub_', // Captura todos os submits de edição
     execute: async (interaction) => {
+        // Recupera o embed atual da mensagem para não perder o que já foi feito
         const oldEmbed = interaction.message.embeds[0]?.data || {};
         const action = interaction.customId.replace('util_eb_sub_', '');
         
         let newEmbed = { ...oldEmbed };
 
-        // ... Lógica de processamento (MANTENHA A MESMA LÓGICA DE ANTES AQUI) ...
-        if (action === 'title') newEmbed.title = interaction.fields.getTextInputValue('input_content');
-        else if (action === 'desc') newEmbed.description = interaction.fields.getTextInputValue('input_content');
+        // Lógica de atualização baseada no input do modal
+        const inputContent = interaction.fields.getTextInputValue('input_content');
+
+        if (action === 'title') {
+            newEmbed.title = inputContent;
+        } 
+        else if (action === 'desc') {
+            newEmbed.description = inputContent;
+        }
         else if (action === 'color') {
-            let colorHex = interaction.fields.getTextInputValue('input_content');
-            if (!colorHex.startsWith('#')) colorHex = '#' + colorHex;
-            try { newEmbed.color = parseInt(colorHex.replace('#', ''), 16); } catch (e) {}
+            let hex = inputContent.replace('#', '');
+            try { newEmbed.color = parseInt(hex, 16); } catch (e) {}
         }
         else if (action === 'image') {
-            const url = interaction.fields.getTextInputValue('input_content');
-            if (url) newEmbed.image = { url: url }; else delete newEmbed.image;
+            if (inputContent) newEmbed.image = { url: inputContent };
+            else delete newEmbed.image;
         }
         else if (action === 'thumb') {
-            const url = interaction.fields.getTextInputValue('input_content');
-            if (url) newEmbed.thumbnail = { url: url }; else delete newEmbed.thumbnail;
+            if (inputContent) newEmbed.thumbnail = { url: inputContent };
+            else delete newEmbed.thumbnail;
         }
         else if (action === 'meta') {
-            const footerText = interaction.fields.getTextInputValue('input_footer');
-            const authorText = interaction.fields.getTextInputValue('input_author');
-            if (footerText) newEmbed.footer = { text: footerText }; else delete newEmbed.footer;
-            if (authorText) newEmbed.author = { name: authorText }; else delete newEmbed.author;
+            const footer = interaction.fields.getTextInputValue('input_footer');
+            const author = interaction.fields.getTextInputValue('input_author');
+            if (footer) newEmbed.footer = { text: footer };
+            if (author) newEmbed.author = { name: author };
         }
 
-        const payload = embedBuilderPanel(newEmbed);
-        // ✅ CORREÇÃO: Sem .body
-        await interaction.update(payload);
+        // Atualiza a mensagem com o novo embed
+        // Passamos o objeto direto, SEM .body, pois é uma mensagem padrão
+        await interaction.update(embedBuilderPanel(newEmbed));
     }
 };
