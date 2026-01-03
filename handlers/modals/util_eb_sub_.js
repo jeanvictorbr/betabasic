@@ -1,18 +1,19 @@
 // File: handlers/modals/util_eb_sub_.js
 const embedBuilderPanel = require('../../ui/utilities/embedBuilderPanel.js');
-const { resolveColor } = require('discord.js'); // Ajuda com cores
 
 module.exports = {
-    customId: 'util_eb_sub_',
+    customId: 'util_eb_sub_', // Prefixo para capturar todos os sub-modais
     execute: async (interaction) => {
-        // Recupera o embed atual da mensagem
+        // Recupera o embed atual da mensagem (o estado atual)
         const oldEmbed = interaction.message.embeds[0]?.data || {};
+        
+        // Identifica qual ação está sendo executada (title, desc, color, etc)
         const action = interaction.customId.replace('util_eb_sub_', '');
         
-        // Clona para editar
+        // Clona o objeto para edição segura
         let newEmbed = { ...oldEmbed };
 
-        // Processa baseado na ação
+        // Processa a alteração baseada na ação
         if (action === 'title') {
             newEmbed.title = interaction.fields.getTextInputValue('input_content');
         } 
@@ -21,26 +22,38 @@ module.exports = {
         }
         else if (action === 'color') {
             let colorHex = interaction.fields.getTextInputValue('input_content');
+            // Garante que tenha #
             if (!colorHex.startsWith('#')) colorHex = '#' + colorHex;
             try {
+                // Converte Hex para Inteiro (formato Discord)
                 newEmbed.color = parseInt(colorHex.replace('#', ''), 16);
-            } catch (e) { /* ignora erro de cor */ }
+            } catch (e) { /* ignora erro de cor inválida */ }
         }
         else if (action === 'image') {
-            newEmbed.image = { url: interaction.fields.getTextInputValue('input_content') };
+            const url = interaction.fields.getTextInputValue('input_content');
+            if (url) newEmbed.image = { url: url };
+            else delete newEmbed.image; // Remove se estiver vazio
         }
         else if (action === 'thumb') {
-            newEmbed.thumbnail = { url: interaction.fields.getTextInputValue('input_content') };
+            const url = interaction.fields.getTextInputValue('input_content');
+            if (url) newEmbed.thumbnail = { url: url };
+            else delete newEmbed.thumbnail;
         }
         else if (action === 'meta') {
             const footerText = interaction.fields.getTextInputValue('input_footer');
             const authorText = interaction.fields.getTextInputValue('input_author');
             
             if (footerText) newEmbed.footer = { text: footerText };
+            else delete newEmbed.footer;
+
             if (authorText) newEmbed.author = { name: authorText };
+            else delete newEmbed.author;
         }
 
-        // Atualiza a UI com o novo embed
-        await interaction.update(embedBuilderPanel(newEmbed));
+        // Gera a nova interface com o embed atualizado
+        const payload = embedBuilderPanel(newEmbed);
+
+        // ✅ CORREÇÃO CRÍTICA: Enviar apenas o .body para Componentes V2
+        await interaction.update(payload.body);
     }
 };

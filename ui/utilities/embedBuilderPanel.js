@@ -6,7 +6,7 @@ module.exports = (currentEmbed) => {
     const previewEmbed = currentEmbed || {
         title: "Título do Embed",
         description: "Esta é a descrição do seu embed. Clique nos botões abaixo para editar.",
-        color: 0x2B2D31, // Cor padrão escura
+        color: 0x2B2D31, 
     };
 
     return {
@@ -14,10 +14,14 @@ module.exports = (currentEmbed) => {
         body: {
             type: 1,
             flags: V2_FLAG,
-            content: "🎨 **Criador de Interfaces V2**\nEdite o embed abaixo usando os botões. O resultado é atualizado em tempo real.",
-            // O Preview fica aqui nos embeds da mensagem
-            embeds: [previewEmbed],
+            // ❌ REMOVIDO: content solto aqui causava o erro
+            embeds: [previewEmbed], // Embeds continuam aqui
             components: [
+                // ✅ ADICIONADO: Texto como componente
+                {
+                    type: 10,
+                    content: "🎨 **Criador de Interfaces V2**\nEdite o embed abaixo usando os botões. O resultado é atualizado em tempo real."
+                },
                 {
                     type: 1, // Linha 1: Conteúdo Principal
                     components: [
