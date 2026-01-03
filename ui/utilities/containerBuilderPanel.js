@@ -6,37 +6,36 @@ module.exports = (data) => {
     const state = data || {
         items: [
             { type: 'header', content: 'Título do Container' },
-            { type: 'text_bar', content: 'Este texto tem uma barra lateral simulada usando Markdown.\nFica parecendo um embed moderno.' }
+            { type: 'text_bar', content: 'Este texto tem uma barra lateral simulada.\nÉ o estilo mais próximo de Embed na V2.' }
         ]
     };
 
-    // Constrói os componentes visuais baseados na lista de itens
+    // Constrói os componentes visuais do PREVIEW
     const previewComponents = state.items.map((item, index) => {
         if (item.type === 'header') {
-            return { type: 10, content: `## ${item.content}` }; // Markdown de Título Grande
+            return { type: 10, content: `## ${item.content}` }; // Markdown Título
         }
         if (item.type === 'text_bar') {
-            return { type: 10, content: `> ${item.content}` }; // Markdown de Barra Lateral (Blockquote)
+            // O "> " cria a barra lateral cinza (Blockquote)
+            return { type: 10, content: `> ${item.content}` }; 
         }
         if (item.type === 'text_raw') {
-            return { type: 10, content: item.content }; // Texto normal
+            return { type: 10, content: item.content || "⠀" }; 
         }
         if (item.type === 'divider') {
-            return { type: 10, content: "─────────────────────────" }; // Divisória Visual
+            return { type: 10, content: "─────────────────────────" };
         }
         if (item.type === 'spacer') {
-            return { type: 10, content: " " }; // Espaço vazio
+            return { type: 10, content: "⠀" }; // Caractere vazio válido
         }
         if (item.type === 'image' && item.url) {
-            // Nota: Imagens em V2 são tratadas como attachments ou links, 
-            // aqui simulamos a linha da imagem ou usamos o recurso de MessageFlag se suportado.
-            // Para simplicidade visual no preview de texto:
-            return { type: 10, content: `🖼️ **[Imagem Anexada]**\n(${item.url})` };
+            // Exibe o link da imagem (o Discord renderiza o preview abaixo automaticamente)
+            return { type: 10, content: item.url };
         }
-        return { type: 10, content: `[Item Desconhecido]` };
+        return { type: 10, content: `[Item Inválido]` };
     });
 
-    // Adiciona limites para não quebrar a API (max 10 componentes por mensagem no preview)
+    // Limite de segurança para preview (max 10 itens para não estourar a mensagem)
     const safePreview = previewComponents.slice(0, 8); 
 
     return {
@@ -45,42 +44,71 @@ module.exports = (data) => {
             type: 1,
             flags: V2_FLAG,
             components: [
-                { type: 10, content: "🛠️ **Construtor de Containers V2 (Geração 2.0)**\nAdicione elementos usando o menu abaixo." },
-                { type: 10, content: " " }, // Espaço
+                { type: 10, content: "🛠️ **Construtor de Containers V2**" },
+                { type: 10, content: "─────────────────────────" }, // Separador visual fixo
                 
-                // --- ÁREA DE PREVIEW ---
+                // --- ÁREA DE PREVIEW DINÂMICO ---
                 ...safePreview,
-                // -----------------------
+                // --------------------------------
 
-                { type: 10, content: " " },
-                { type: 10, content: "⚙️ **Controles de Edição**" },
+                { type: 10, content: "─────────────────────────" },
                 
-                // Menu de Adicionar Componentes
+                // Menu de Adicionar Componentes (EMOJIS CORRIGIDOS)
                 {
                     type: 1,
                     components: [{
                         type: 3, // String Select
                         custom_id: "util_cb_add_select",
-                        placeholder: "➕ Adicionar Elemento ao Container...",
+                        placeholder: "➕ Adicionar Elemento...",
                         options: [
-                            { label: "Título Grande (##)", value: "add_header", description: "Texto grande e em negrito.", emoji: { name: "Tb" } },
-                            { label: "Texto com Barra (>)", value: "add_text_bar", description: "Simula a barra lateral de citação.", emoji: { name: "▎" } },
-                            { label: "Texto Normal", value: "add_text_raw", description: "Texto simples sem formatação.", emoji: { name: "📄" } },
-                            { label: "Divisória", value: "add_divider", description: "Linha separadora.", emoji: { name: "➖" } },
-                            { label: "Espaço em Branco", value: "add_spacer", description: "Pula uma linha.", emoji: { name: "⬛" } },
-                            { label: "Imagem (URL)", value: "add_image", description: "Adiciona uma imagem via Link.", emoji: { name: "🖼️" } }
+                            { 
+                                label: "Título Grande (##)", 
+                                value: "add_header", 
+                                description: "Texto grande em negrito.", 
+                                emoji: { name: "🔹" } // Unicode válido
+                            },
+                            { 
+                                label: "Texto com Barra (>)", 
+                                value: "add_text_bar", 
+                                description: "Simula o visual de Embed/Citação.", 
+                                emoji: { name: "🗨️" } // Unicode válido
+                            },
+                            { 
+                                label: "Texto Normal", 
+                                value: "add_text_raw", 
+                                description: "Texto simples.", 
+                                emoji: { name: "📄" } 
+                            },
+                            { 
+                                label: "Divisória", 
+                                value: "add_divider", 
+                                description: "Linha separadora.", 
+                                emoji: { name: "➖" } 
+                            },
+                            { 
+                                label: "Espaço em Branco", 
+                                value: "add_spacer", 
+                                description: "Pula uma linha.", 
+                                emoji: { name: "⬛" } 
+                            },
+                            { 
+                                label: "Imagem (URL)", 
+                                value: "add_image", 
+                                description: "Link de imagem.", 
+                                emoji: { name: "🖼️" } 
+                            }
                         ]
                     }]
                 },
                 
-                // Menu de Ações (Limpar/Remover Último)
+                // Menu de Ações
                 {
                     type: 1,
                     components: [
-                        { type: 2, style: 2, label: "Remover Último", emoji: { name: "↩️" }, custom_id: "util_cb_undo" },
-                        { type: 2, style: 4, label: "Limpar Tudo", emoji: { name: "🗑️" }, custom_id: "util_cb_clear" },
-                        { type: 2, style: 3, label: "Enviar Container", emoji: { name: "🚀" }, custom_id: "util_cb_send" },
-                        { type: 2, style: 2, label: "Voltar", emoji: { name: "⬅️" }, custom_id: "config_open_utilities" }
+                        { type: 2, style: 2, label: "Desfazer", emoji: { name: "↩️" }, custom_id: "util_cb_undo" },
+                        { type: 2, style: 4, label: "Limpar", emoji: { name: "🗑️" }, custom_id: "util_cb_clear" },
+                        { type: 2, style: 3, label: "Enviar", emoji: { name: "🚀" }, custom_id: "util_cb_send" },
+                        { type: 2, style: 2, label: "Sair", emoji: { name: "✖️" }, custom_id: "delete_ephemeral_reply" }
                     ]
                 }
             ]
