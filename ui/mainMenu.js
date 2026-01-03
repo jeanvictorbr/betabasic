@@ -75,6 +75,7 @@ module.exports = async function generateMainMenu(interaction, page = 0) {
             type: 9, accessory: { type: 2, style: 2, label: "Abrir", emoji: { name: "➕" }, custom_id: "open_ausencias_menu" },
             components: [{ type: 10, content: "🏖️ Ausências" }, { type: 10, content: "Configure todo o sistema de **ausências**." }]
         },
+                { type: 14, divider: true, spacing: 2 },
         {
     type: 9, accessory: { type: 2, style: 2, label: "Abrir", emoji: { name: "➕" }, custom_id: "config_open_utilities" },
     components: [{ type: 10, content: "🛠️ Utilidades & Builder" }, { type: 10, content: "Crie **containers (embeds)** e gerencie ferramentas." }]
