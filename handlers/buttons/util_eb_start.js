@@ -1,33 +1,27 @@
 // File: handlers/buttons/util_eb_start.js
-const embedBuilderPanel = require('../../ui/utilities/embedBuilderPanel.js');
+const containerBuilderPanel = require('../../ui/utilities/containerBuilderPanel.js');
 
 module.exports = {
-    customId: 'util_eb_start',
+    customId: 'util_eb_start', // Mantive o ID do botão do menu anterior
     execute: async (interaction) => {
         try {
-            const initialEmbed = {
-                title: "Novo Container",
-                description: "Edite este container usando os botões abaixo.",
-                color: 0x5865F2,
-                footer: { text: "Criado com BasicFlow" }
+            // Estado inicial limpo
+            const initialState = {
+                accessoryLabel: "Botão Ação",
+                accessoryStyle: 1,
+                title: "Novo Container V2",
+                description: "Edite este texto usando os controles abaixo.",
+                emoji: "⭐"
             };
 
-            const payload = embedBuilderPanel(initialEmbed);
-
-            // ✅ CORREÇÃO DEFINITIVA:
-            // Usamos .reply() em vez de .update().
-            // Motivo: Não é possível converter uma mensagem V2 (o menu) em uma mensagem 
-            // padrão (que suporta embeds) via edição. Criamos uma nova mensagem.
-            await interaction.reply({ 
-                ...payload, 
-                ephemeral: true 
-            });
-
+            const payload = containerBuilderPanel(initialState);
+            
+            // Resposta V2 correta
+            await interaction.update(payload.body);
+            
         } catch (error) {
-            console.error("Erro ao iniciar editor:", error);
-            if (!interaction.replied) {
-                await interaction.reply({ content: "❌ Erro crítico ao abrir o editor.", ephemeral: true });
-            }
+            console.error("Erro ao iniciar Container Builder:", error);
+            if (!interaction.replied) await interaction.reply({ content: "Erro ao abrir.", ephemeral: true });
         }
     }
 };
