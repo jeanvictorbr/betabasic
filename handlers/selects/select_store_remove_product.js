@@ -1,16 +1,16 @@
+// handlers/selects/select_store_remove_product.js
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const db = require('../../database.js');
 
 module.exports = {
     customId: 'select_store_remove_product',
     execute: async (interaction, client) => {
-        // Recupera o ID do produto selecionado
         const productId = interaction.values[0];
 
         try {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-            // Busca detalhes do produto para mostrar na confirmação
+            // Busca produto
             const result = await db.query('SELECT name, price FROM store_products WHERE id = $1 AND guild_id = $2', [productId, interaction.guild.id]);
             
             if (result.rowCount === 0) {
@@ -20,13 +20,14 @@ module.exports = {
             const product = result.rows[0];
 
             const embed = new EmbedBuilder()
-                .setTitle('🗑️ Confirmar Exclusão')
-                .setDescription(`Você tem certeza que deseja remover o produto permanentemente?\n\n📦 **Produto:** ${product.name}\n💰 **Preço:** R$ ${product.price}`)
+                .setTitle('🗑️ Confirmar Exclusão de Produto')
+                .setDescription(`Você tem certeza que deseja remover este produto?\n\n📦 **${product.name}**\n💰 R$ ${product.price}`)
                 .setColor('#FF0000');
 
             const row = new ActionRowBuilder().addComponents(
+                // MUDANÇA AQUI: ID ÚNICO PARA PRODUTOS "store_confirm_delprod_"
                 new ButtonBuilder()
-                    .setCustomId(`store_confirm_delete_${productId}`) // Passa o ID no botão
+                    .setCustomId(`store_confirm_delprod_${productId}`) 
                     .setLabel('Confirmar Exclusão')
                     .setStyle(ButtonStyle.Danger)
                     .setEmoji('🗑️'),
@@ -39,11 +40,8 @@ module.exports = {
             await interaction.editReply({ embeds: [embed], components: [row] });
 
         } catch (error) {
-            console.error('Erro ao selecionar produto para remover:', error);
-            // Fallback seguro se não der pra editar
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: '❌ Erro ao processar seleção.', flags: MessageFlags.Ephemeral });
-            }
+            console.error('Erro ao selecionar produto:', error);
+            if (!interaction.replied) await interaction.reply({ content: '❌ Erro ao processar.', flags: MessageFlags.Ephemeral });
         }
     }
 };
