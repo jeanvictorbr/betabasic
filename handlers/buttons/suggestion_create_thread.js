@@ -1,45 +1,41 @@
-// Substitua o conteúdo em: handlers/buttons/suggestion_create_thread.js
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const db = require('../../database.js');
+// handlers/buttons/suggestion_create_thread.js
+const { ChannelType, PermissionFlagsBits } = require('discord.js');
 
-module.exports = {
-    customId: 'suggestion_create_thread',
-    async execute(interaction) {
-        await interaction.deferUpdate();
-
-        const suggestionResult = await db.query('SELECT * FROM suggestions WHERE message_id = $1', [interaction.message.id]);
-        if (suggestionResult.rows.length === 0) return;
-        const suggestion = suggestionResult.rows[0];
-
-        // Se a thread já existe, não faz nada. O botão já é um link.
-        if (suggestion.thread_id) return;
+module.exports = async (client, interaction, db) => {
+    try {
+        const message = interaction.message;
         
-        try {
-            const threadName = `[#${suggestion.id}] Discussão: ${suggestion.title}`.substring(0, 100);
-            const thread = await interaction.message.startThread({
-                name: threadName,
-                autoArchiveDuration: 1440,
-                reason: `Discussão para a sugestão #${suggestion.id}`
-            });
-            
-            await thread.send({ content: `💬 <@${interaction.user.id}> iniciou uma discussão sobre a sugestão \`#${suggestion.id}\` de <@${suggestion.user_id}>.` });
-
-            await db.query('UPDATE suggestions SET thread_id = $1 WHERE id = $2', [thread.id, suggestion.id]);
-
-            const discussionButtonRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setLabel('Ver Discussão')
-                    .setStyle(ButtonStyle.Link)
-                    .setURL(thread.url)
-                    .setEmoji('👀')
-            );
-            
-            await interaction.editReply({ components: [interaction.message.components[0], interaction.message.components[1], discussionButtonRow] });
-
-        } catch (error) {
-            console.error('Falha ao criar a thread de discussão:', error);
-            // Este erro pode acontecer se o usuário clicar duas vezes muito rápido. O followUp ajuda a notificar.
-            await interaction.followUp({ content: '❌ Ocorreu um erro ao criar a discussão. Talvez ela já tenha sido criada.', ephemeral: true }).catch(() => {});
+        // Verifica se já existe um tópico
+        if (message.hasThread) {
+            return interaction.reply({ content: '❌ Já existe uma discussão para esta sugestão.', ephemeral: true });
         }
+
+        // Recupera o embed para pegar o título ou autor
+        const suggestionEmbed = message.embeds[0];
+        const title = suggestionEmbed.title || 'Sugestão';
+
+        // Cria o tópico
+        const thread = await message.startThread({
+            name: `💬 Discussão: ${title.slice(0, 50)}`, // Limita tamanho do nome
+            autoArchiveDuration: 1440, // 24 horas
+            type: ChannelType.PublicThread,
+            reason: `Discussão criada por ${interaction.user.tag}`
+        });
+
+        // IMPORTANTE: Adiciona permissão para @everyone digitar NO TÓPICO
+        // Isso sobrepõe a restrição do canal pai
+        await thread.permissionOverwrites.create(interaction.guild.roles.everyone, {
+            SendMessages: true,
+            ViewChannel: true
+        });
+
+        // Adiciona o usuário que clicou no botão
+        await thread.members.add(interaction.user.id);
+
+        await interaction.reply({ content: `✅ Discussão criada com sucesso! [Clique aqui para ir](${thread.url})`, ephemeral: true });
+
+    } catch (error) {
+        console.error('Erro ao criar thread:', error);
+        interaction.reply({ content: '❌ Ocorreu um erro ao criar a discussão.', ephemeral: true });
     }
 };

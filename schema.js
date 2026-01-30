@@ -259,6 +259,7 @@ const schema = {
         suggestions_enabled: { type: 'BOOLEAN', default: false },
         suggestions_channel: { type: 'VARCHAR(255)' },
         suggestions_log_channel: { type: 'VARCHAR(255)' },
+        suggestions_vitrine_image: { type: 'TEXT', default: null },
         suggestions_staff_role: { type: 'VARCHAR(255)' },
         suggestions_vitrine_image: { type: 'VARCHAR(1024)' },
         suggestions_cooldown_minutes: { type: 'INTEGER', default: 2 },
