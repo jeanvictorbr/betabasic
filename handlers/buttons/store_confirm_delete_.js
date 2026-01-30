@@ -2,14 +2,17 @@
 const { MessageFlags } = require('discord.js');
 const db = require('../../database.js');
 const updateStoreVitrine = require('../../utils/updateStoreVitrine');
-const { logStoreAction } = require('../../utils/loggers/storeLog'); // <--- IMPORTADO
+const { logStoreAction } = require('../../utils/loggers/storeLog');
 
 module.exports = {
     customId: 'store_confirm_delprod_', 
-    execute: async (interaction, client) => {
+    execute: async (interaction) => { // Removi o 'client' dos argumentos para evitar confusão
         try {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+            // Pega o client direto da interação (MUITO MAIS SEGURO)
+            const client = interaction.client;
+            
             const productId = interaction.customId.split('_')[3];
 
             if (!productId || isNaN(productId)) {
@@ -24,15 +27,17 @@ module.exports = {
 
             const product = check.rows[0];
 
+            // Remove do banco
             await db.query('DELETE FROM store_stock WHERE product_id = $1', [productId]);
             await db.query('DELETE FROM store_products WHERE id = $1 AND guild_id = $2', [productId, interaction.guild.id]);
 
-            // --- LOG DE AUDITORIA AQUI ---
+            // --- LOG DE AUDITORIA CORRIGIDO ---
+            // Agora passando 'client' corretamente
             await logStoreAction(client, interaction.guild.id, 'DELETE', interaction.user, {
                 name: `Produto: ${product.name}`,
                 price: product.price
             });
-            // -----------------------------
+            // -----------------------------------
 
             try {
                 if (updateStoreVitrine) {
