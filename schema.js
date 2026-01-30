@@ -264,7 +264,7 @@ const schema = {
         suggestions_vitrine_image: { type: 'VARCHAR(1024)' },
         suggestions_cooldown_minutes: { type: 'INTEGER', default: 2 },
         suggestions_mention_everyone: { type: 'BOOLEAN', default: false },
-
+        suggestions_vitrine_image: { type: 'TEXT', default: null }
         // Moderação
         mod_log_channel: { type: 'VARCHAR(255)' },
         mod_roles: { type: 'TEXT' },
