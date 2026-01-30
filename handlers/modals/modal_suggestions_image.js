@@ -1,36 +1,43 @@
+// handlers/modals/modal_suggestions_image.js
+const { MessageFlags } = require('discord.js');
+const db = require('../../database.js'); // Importação direta para garantir a conexão
+
 module.exports = {
     customId: 'modal_suggestions_image',
-    // CORREÇÃO AQUI: Ordem dos parâmetros ajustada
-    execute: async (interaction, client, db) => {
-        // Fallback de segurança para identificar a interação correta
-        const i = interaction.fields ? interaction : client; 
-        const database = db || (interaction.query ? interaction : client); // Tenta achar o DB
-
-        const imageUrl = i.fields.getTextInputValue('image_url');
+    // O index.js envia (interaction, client)
+    execute: async (interaction, client) => {
+        
+        const imageUrl = interaction.fields.getTextInputValue('image_url');
 
         // Validação básica de URL
         if (!imageUrl.match(/^https?:\/\/.*/)) {
-            return i.reply({ content: '❌ Link inválido. Certifique-se de começar com http:// ou https://', ephemeral: true });
+            return interaction.reply({ 
+                content: '❌ Link inválido. Certifique-se de começar com http:// ou https://', 
+                flags: MessageFlags.Ephemeral // Correção do warning
+            });
         }
 
         try {
-            // Atualiza a tabela GUILDS
-            // Se 'database' não tiver .query, verifique se o terceiro argumento 'db' está chegando corretamente
-            await database.query(`
+            // Atualiza a tabela GUILDS usando a conexão importada
+            await db.query(`
                 UPDATE guilds 
                 SET suggestions_vitrine_image = $1 
                 WHERE guild_id = $2
-            `, [imageUrl, i.guild.id]);
+            `, [imageUrl, interaction.guild.id]);
 
-            await i.reply({ 
+            await interaction.reply({ 
                 content: '✅ Imagem da vitrine salva com sucesso!\n\nℹ️ **Nota:** Para ver a nova imagem, vá ao menu principal de sugestões e clique em **"Publicar Vitrine"** novamente.', 
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             });
 
         } catch (error) {
             console.error('Erro ao salvar imagem da vitrine:', error);
-            if (!i.replied) {
-                await i.reply({ content: '❌ Erro ao salvar a imagem no banco de dados.', ephemeral: true });
+            // Evita erro se a interação já foi respondida
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ 
+                    content: '❌ Erro ao salvar a imagem no banco de dados.', 
+                    flags: MessageFlags.Ephemeral 
+                });
             }
         }
     }

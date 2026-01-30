@@ -1,18 +1,18 @@
 // handlers/buttons/suggestion_create_thread.js
-const { ChannelType } = require('discord.js');
+const { ChannelType, MessageFlags } = require('discord.js');
+const db = require('../../database.js'); // Importação direta
 
 module.exports = {
     customId: 'suggestion_create_thread',
-    // CORREÇÃO: Ordem dos parâmetros
-    execute: async (interaction, client, db) => {
-        // Fallback de segurança
-        const i = interaction.reply ? interaction : client;
-
+    execute: async (interaction, client) => {
         try {
-            const message = i.message;
+            const message = interaction.message;
             
             if (message.hasThread) {
-                return i.reply({ content: '❌ Já existe uma discussão criada para esta sugestão.', ephemeral: true });
+                return interaction.reply({ 
+                    content: '❌ Já existe uma discussão criada para esta sugestão.', 
+                    flags: MessageFlags.Ephemeral 
+                });
             }
 
             const suggestionEmbed = message.embeds[0];
@@ -22,24 +22,30 @@ module.exports = {
                 name: `💬 Discussão: ${title.slice(0, 50)}`,
                 autoArchiveDuration: 1440,
                 type: ChannelType.PublicThread,
-                reason: `Discussão iniciada por ${i.user.tag}`
+                reason: `Discussão iniciada por ${interaction.user.tag}`
             });
 
-            await thread.permissionOverwrites.create(i.guild.roles.everyone, {
+            // Permissões
+            await thread.permissionOverwrites.create(interaction.guild.roles.everyone, {
                 SendMessages: true,
                 ViewChannel: true
             });
 
-            await thread.members.add(i.user.id);
+            await thread.members.add(interaction.user.id);
 
-            await i.reply({ 
+            await interaction.reply({ 
                 content: `✅ Discussão criada com sucesso! [Clique aqui](${thread.url})`, 
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             });
 
         } catch (error) {
             console.error('Erro thread:', error);
-            if (!i.replied) await i.reply({ content: '❌ Erro ao criar discussão.', ephemeral: true });
+            if (!interaction.replied) {
+                await interaction.reply({ 
+                    content: '❌ Erro ao criar discussão.', 
+                    flags: MessageFlags.Ephemeral 
+                });
+            }
         }
     }
 };
