@@ -1,67 +1,68 @@
-// Crie em: handlers/buttons/store_confirm_delete_cat_.js
+const { MessageFlags } = require('discord.js');
 const db = require('../../database.js');
-const generateCategoriesMenu = require('../../ui/store/categoriesMenu.js');
-const V2_FLAG = 1 << 15;
-const EPHEMERAL_FLAG = 1 << 6;
+const updateStoreVitrine = require('../../utils/updateStoreVitrine'); 
 
 module.exports = {
     customId: 'store_confirm_delete_cat_',
-    async execute(interaction) {
-        // Deferir atualização
-        if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-
-        // Extrair ID: store_confirm_delete_cat_123
-        const categoryId = interaction.customId.split('_').pop();
-
+    execute: async (interaction, client) => {
         try {
-            // 1. Buscar dados antes de deletar (para limpar a vitrine)
-            const catResult = await db.query('SELECT * FROM store_categories WHERE id = $1', [categoryId]);
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            // Extrai o ID: store_confirm_delete_cat_123 -> índice 4
+            const categoryId = interaction.customId.split('_')[4];
+
+            if (!categoryId) {
+                return interaction.editReply({ content: '❌ ID da categoria inválido.' });
+            }
+
+            // 1. Busca a categoria para pegar os IDs das mensagens (vitrine) antes de deletar
+            const catResult = await db.query('SELECT * FROM store_categories WHERE id = $1 AND guild_id = $2', [categoryId, interaction.guild.id]);
             
-            if (catResult.rows.length > 0) {
-                const category = catResult.rows[0];
+            if (catResult.rowCount === 0) {
+                return interaction.editReply({ content: '❌ Categoria já foi excluída.' });
+            }
 
-                // 2. Apagar Mensagem da Vitrine (Se configurada)
-                if (category.vitrine_channel_id && category.vitrine_message_id) {
-                    try {
-                        const channel = await interaction.guild.channels.fetch(category.vitrine_channel_id).catch(() => null);
-                        if (channel) {
-                            const msg = await channel.messages.fetch(category.vitrine_message_id).catch(() => null);
-                            if (msg) await msg.delete();
+            const category = catResult.rows[0];
+
+            // 2. Apaga a mensagem da Vitrine da Categoria no Discord (se existir)
+            if (category.vitrine_channel_id && category.vitrine_message_id) {
+                try {
+                    const channel = await interaction.guild.channels.fetch(category.vitrine_channel_id).catch(() => null);
+                    if (channel) {
+                        const message = await channel.messages.fetch(category.vitrine_message_id).catch(() => null);
+                        if (message) {
+                            await message.delete();
+                            // Opcional: Avisar no log que a vitrine foi apagada
                         }
-                    } catch (err) {
-                        console.error(`[Store] Erro ao limpar vitrine da categoria ${categoryId}:`, err);
                     }
+                } catch (msgError) {
+                    console.log('Não foi possível apagar a mensagem da vitrine antiga (provavelmente já sumiu):', msgError.message);
                 }
-
-                // 3. Desvincular Produtos (Segurança)
-                // Define category_id como NULL para produtos que estavam nesta categoria
-                await db.query('UPDATE store_products SET category_id = NULL WHERE category_id = $1', [categoryId]);
-
-                // 4. DELETAR A CATEGORIA (Ação Principal)
-                await db.query('DELETE FROM store_categories WHERE id = $1', [categoryId]);
             }
 
-            // 5. Recarregar o Menu de Gerenciamento de Categorias
-            const categories = (await db.query(
-                'SELECT id, name FROM store_categories WHERE guild_id = $1 ORDER BY id ASC', 
-                [interaction.guild.id]
-            )).rows;
+            // 3. Desvincula produtos desta categoria (Define category_id como NULL)
+            // Isso evita erro de Foreign Key ou perda de produtos
+            await db.query('UPDATE store_products SET category_id = NULL WHERE category_id = $1', [categoryId]);
 
-            const uiComponents = generateCategoriesMenu(categories);
+            // 4. Deleta a categoria do banco
+            await db.query('DELETE FROM store_categories WHERE id = $1', [categoryId]);
 
-            // Adiciona mensagem de sucesso no topo
-            if (uiComponents[0] && uiComponents[0].components && uiComponents[0].components[0]) {
-                uiComponents[0].components[0].content = `> ✅ **Sucesso:** Categoria deletada e vitrine limpa!\n` + uiComponents[0].components[0].content;
+            // 5. Atualiza a Vitrine Principal (para remover o botão da categoria excluída)
+            try {
+                if (updateStoreVitrine) {
+                    await updateStoreVitrine(client, interaction.guild.id, db);
+                }
+            } catch (vitrineError) {
+                console.error('Erro ao atualizar vitrine principal:', vitrineError);
             }
 
-            await interaction.editReply({
-                components: uiComponents,
-                flags: V2_FLAG | EPHEMERAL_FLAG
+            await interaction.editReply({ 
+                content: `✅ A categoria **${category.name}** foi excluída e sua vitrine removida com sucesso!` 
             });
 
         } catch (error) {
-            console.error("Erro ao deletar categoria:", error);
-            await interaction.followUp({ content: '❌ Erro ao processar exclusão.', ephemeral: true });
+            console.error('Erro ao excluir categoria:', error);
+            await interaction.editReply({ content: '❌ Ocorreu um erro ao tentar excluir a categoria.' });
         }
     }
 };
