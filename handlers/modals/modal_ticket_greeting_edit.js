@@ -9,28 +9,34 @@ module.exports = {
     async execute(interaction) {
         await interaction.deferUpdate();
         
-        // Pega o texto digitado no modal
+        // 1. Pega o novo texto digitado
         const newMessage = interaction.fields.getTextInputValue('input_greeting_message');
 
-        // 1. Atualiza a mensagem na tabela guild_settings
+        // 2. Salva no banco (Sistema de Mensagem Única)
         await db.query(
             'UPDATE guild_settings SET tickets_greeting_message = $1 WHERE guild_id = $2',
             [newMessage, interaction.guild.id]
         );
 
-        // 2. Busca as configurações atualizadas para redesenhar o menu
+        // 3. Busca as configurações atualizadas
         const settings = (await db.query('SELECT * FROM guild_settings WHERE guild_id = $1', [interaction.guild.id])).rows[0] || {};
         
-        // 3. (CORREÇÃO) Como você não tem a tabela 'ticket_categories', passamos um array vazio []
-        // Isso evita o erro de "relation does not exist" E evita o erro de "undefined filter"
-        const categories = []; 
+        // 4. --- O TRUQUE (ADAPTER) ---
+        // Criamos uma lista "virtual" contendo a mensagem única do banco.
+        // Assim o seu menu (que espera uma lista) funciona perfeitamente sem crashar.
+        const messagesAdapter = [];
         
-        // Se um dia você criar uma tabela de departamentos, você muda a linha acima para:
-        // const categories = (await db.query('SELECT * FROM nome_da_sua_tabela WHERE guild_id = $1', [interaction.guild.id])).rows;
+        if (settings.tickets_greeting_message) {
+            messagesAdapter.push({
+                id: 'PADRAO', // ID Fictício
+                message: settings.tickets_greeting_message,
+                is_active: settings.tickets_greeting_enabled // Usa o status global
+            });
+        }
 
-        // 4. Gera o menu passando settings e o array vazio
+        // 5. Gera o menu passando settings e a nossa lista adaptada
         await interaction.editReply({
-            components: generateGreetingMenu(settings, categories),
+            components: generateGreetingMenu(settings, messagesAdapter),
             flags: V2_FLAG | EPHEMERAL_FLAG,
         });
     }
