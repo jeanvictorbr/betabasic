@@ -6,7 +6,6 @@ const { formatKK } = require('../../utils/rpCurrency.js');
 module.exports = {
     customId: 'f_mod_',
     async execute(interaction, guildSettings) {
-        // Parse do CustomId
         const payload = interaction.customId.replace('f_mod_', '').split('_');
         const type = payload[0];
         const category = payload[1];
@@ -17,9 +16,9 @@ module.exports = {
 
         if (!vehicle) return interaction.reply({ content: '❌ Erro ao localizar veículo na base.', ephemeral: true });
 
-        // Trabalho sujo matemático (Lucro = Bruto - Caixa)
         const lucro = vehicle.bruto - vehicle.caixa;
 
+        // O segredo está aqui: ephemeral (Invisível pra todos, menos pro usuário)
         await interaction.deferReply({ ephemeral: true });
 
         try {
@@ -28,7 +27,6 @@ module.exports = {
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             `, [interaction.guildId, interaction.user.id, vehicle.name, category, clientInfo, type, vehicle.bruto, vehicle.caixa, lucro]);
 
-            // Embed de Sucesso para o Corretor
             const successEmbed = new EmbedBuilder()
                 .setTitle('✅ Registro Efetuado com Sucesso!')
                 .setColor('#2ECC71')
@@ -42,7 +40,12 @@ module.exports = {
 
             await interaction.editReply({ embeds: [successEmbed] });
 
-            // ENVIAR LOG PARA A CHEFIA (Aviso: Adicione a coluna 'ferrari_log_channel' no guild_settings depois)
+            // APAGA MENSAGEM DO USUÁRIO EM 10 SEGUNDOS (Limpeza visual)
+            setTimeout(() => {
+                interaction.deleteReply().catch(() => {});
+            }, 10000);
+
+            // LOG PARA A CHEFIA (Essa fica salva no canal que ele configurou)
             if (guildSettings && guildSettings.ferrari_log_channel) {
                 const logChannel = await interaction.guild.channels.fetch(guildSettings.ferrari_log_channel).catch(()=>null);
                 if (logChannel) {
@@ -61,7 +64,7 @@ module.exports = {
             }
         } catch (error) {
             console.error('[Ferrari Mod] Erro ao salvar:', error);
-            await interaction.editReply('❌ Ocorreu um erro crítico ao salvar sua venda no Banco de Dados.');
+            await interaction.editReply({ content: '❌ Ocorreu um erro crítico ao salvar sua venda no Banco.', embeds: [] });
         }
     }
 };
