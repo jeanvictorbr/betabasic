@@ -29,16 +29,16 @@ module.exports = async (interaction, guildSettings) => {
         .setColor('#FFD700') // Dourado
         .addFields(
             { name: 'Vendas Totais', value: `\`${global.total_vendas}\``, inline: true },
-            { name: 'Giro Financeiro (Bruto)', value: formatKK(global.total_bruto), inline: true },
+            { name: 'Giro Financeiro (Bruto)', value: formatKK(Number(global.total_bruto)), inline: true },
             { name: '\u200B', value: '\u200B', inline: true }, // Spacer
-            { name: 'Repasse Total (Caixa)', value: formatKK(global.total_caixa), inline: true },
-            { name: 'Lucro Total Corretores', value: formatKK(global.total_lucro), inline: true }
+            { name: 'Repasse Total (Caixa)', value: formatKK(Number(global.total_caixa)), inline: true },
+            { name: 'Lucro Total Corretores', value: formatKK(Number(global.total_lucro)), inline: true }
         );
 
     let topString = '';
     topRes.rows.forEach((row, index) => {
         const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅';
-        topString += `${medal} <@${row.user_id}> - Vendas: \`${row.vendas}\` | Lucro: **${formatKK(row.lucro)}**\n`;
+        topString += `${medal} <@${row.user_id}> - Vendas: \`${row.vendas}\` | Lucro: **${formatKK(Number(row.lucro))}**\n`;
     });
 
     embed.addFields({ name: '🏆 TOP 5 Corretores', value: topString || 'Nenhuma venda registrada ainda.' });
