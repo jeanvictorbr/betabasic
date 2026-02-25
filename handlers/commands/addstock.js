@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../../database.js');
 const { parseKK } = require('../../utils/rpCurrency.js');
+const updateVitrine = require('../../utils/updateFerrariVitrine.js'); // <-- AQUI ESTÁ O IMPORT QUE FALTAVA!
 
 module.exports = async (interaction, guildSettings) => {
     const nome = interaction.options.getString('nome');
@@ -61,6 +62,8 @@ module.exports = async (interaction, guildSettings) => {
                         .setColor('#00ff00');
 
                     await interaction.followUp({ embeds: [finalEmbed] });
+
+                    // ATUALIZA A VITRINE AO VIVO PARA OS CLIENTES
                     await updateVitrine(interaction.client, interaction.guildId);
                 });
             });
