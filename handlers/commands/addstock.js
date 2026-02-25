@@ -61,6 +61,7 @@ module.exports = async (interaction, guildSettings) => {
                         .setColor('#00ff00');
 
                     await interaction.followUp({ embeds: [finalEmbed] });
+                    await updateVitrine(interaction.client, interaction.guildId);
                 });
             });
         }

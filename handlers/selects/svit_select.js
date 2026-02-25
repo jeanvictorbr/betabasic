@@ -1,6 +1,7 @@
 const { ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../../database.js');
 const { formatKK } = require('../../utils/rpCurrency.js');
+const updateVitrine = require('../../utils/updateFerrariVitrine.js'); // Importamos o motor
 
 module.exports = {
     customId: 'svit_select',
@@ -10,6 +11,9 @@ module.exports = {
         
         const res = await db.query('SELECT * FROM ferrari_stock_products WHERE id = $1 AND quantity > 0', [productId]);
         const product = res.rows[0];
+
+        // Reseta o Menu de Seleção visualmente atualizando a vitrine principal
+        updateVitrine(interaction.client, interaction.guildId);
 
         if (!product) return interaction.editReply('❌ Este produto esgotou ou não existe mais!');
 
@@ -35,8 +39,7 @@ module.exports = {
                 .addFields(
                     { name: 'Valor a Pagar', value: formatKK(Number(product.price_kk)), inline: true },
                     { name: 'Estoque Restante', value: product.quantity.toString(), inline: true }
-                )
-                .setColor('#2ECC71');
+                ).setColor('#2ECC71');
 
             const actionRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('fc_paid').setLabel('Já Paguei').setStyle(ButtonStyle.Success).setEmoji('💸'),

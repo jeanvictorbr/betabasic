@@ -260,6 +260,8 @@ const schema = {
         ponto_vitrine_footer: { type: 'TEXT' },
         ponto_vitrine_color: { type: 'VARCHAR(7)' },
         ponto_dashboard_v2_enabled: { type: 'BOOLEAN', default: false },
+        ferrari_vitrine_channel: { type: 'VARCHAR(255)' },
+        ferrari_vitrine_msg: { type: 'VARCHAR(255)' },
 
         // Sugestões (CORRIGIDO AQUI)
         suggestions_enabled: { type: 'BOOLEAN', default: false },
