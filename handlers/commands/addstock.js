@@ -8,7 +8,7 @@ module.exports = async (interaction, guildSettings) => {
     
     const embedStart = new EmbedBuilder()
         .setTitle('📦 Configuração de Novo Estoque')
-        .setDescription(`Você está adicionando o produto: **${nome}**\n\nO próximo passo é configurar a **Mensagem de Saudação** (aquela que aparece quando o cliente abre o carrinho). Você pode incluir links de imagens ou enviar o arquivo da foto junto com o texto nela.\n\nClique no botão abaixo quando estiver pronto para digitar a mensagem.`)
+        .setDescription(`Você está adicionando o produto: **${nome}**\n\nO próximo passo é configurar a **Mensagem de Saudação** (aquela que aparece quando o cliente abre o carrinho). Você pode incluir links externos ou **enviar o arquivo da foto junto com o texto**.\n\nClique no botão abaixo quando estiver pronto para digitar a mensagem.`)
         .setColor('#2ECC71');
 
     const row = new ActionRowBuilder().addComponents(
@@ -21,22 +21,29 @@ module.exports = async (interaction, guildSettings) => {
 
     collector.on('collect', async i => {
         if (i.customId === 'stock_step1') {
-            await i.update({ content: '✍️ **Envie agora neste chat a mensagem de saudação do produto.** (Você tem 2 minutos).', embeds: [], components: [] });
+            await i.update({ content: '✍️ **Envie agora neste chat a mensagem de saudação do produto.** (Se quiser imagem, anexe a foto na mesma mensagem).', embeds: [], components: [] });
             
             const msgCollector = interaction.channel.createMessageCollector({ filter: m => m.author.id === interaction.user.id, max: 1, time: 120000 });
             
             msgCollector.on('collect', async msg => {
                 let welcomeMessage = msg.content;
+                let imageData = null;
                 
+                // SÊNIOR: Faz o download da imagem e converte para Base64
                 if (msg.attachments.size > 0) {
                     const attachment = msg.attachments.first();
-                    welcomeMessage += `\n${attachment.url}`;
+                    try {
+                        const res = await fetch(attachment.url);
+                        const arrayBuffer = await res.arrayBuffer();
+                        imageData = Buffer.from(arrayBuffer).toString('base64');
+                    } catch (e) {
+                        console.error('Erro ao salvar imagem:', e);
+                    }
                 }
 
-                // A MÁGICA AQUI: O bot NÃO apaga mais a mensagem. Assim o link do Discord nunca quebra!
                 await msg.react('📸').catch(()=>{});
 
-                await interaction.followUp({ content: '✅ Saudação salva! (Sua mensagem não foi apagada para manter a imagem ativa). Agora, digite a **Quantidade** e o **Preço em KK** separados por espaço. Exemplo: `5 1.5KK`' });
+                await interaction.followUp({ content: '✅ Saudação e Imagem salvas! Agora, digite a **Quantidade** e o **Preço em KK** separados por espaço. Exemplo: `5 1.5KK`' });
 
                 const mathCollector = interaction.channel.createMessageCollector({ filter: m => m.author.id === interaction.user.id, max: 1, time: 60000 });
 
@@ -52,9 +59,10 @@ module.exports = async (interaction, guildSettings) => {
 
                     const priceParsed = parseKK(priceText);
 
+                    // Salva a mensagem E A IMAGEM CRIPTOGRAFADA no Banco de Dados
                     await db.query(
-                        'INSERT INTO ferrari_stock_products (guild_id, name, welcome_message, quantity, price_kk) VALUES ($1, $2, $3, $4, $5)',
-                        [interaction.guildId, nome, welcomeMessage, qty, priceParsed]
+                        'INSERT INTO ferrari_stock_products (guild_id, name, welcome_message, image_data, quantity, price_kk) VALUES ($1, $2, $3, $4, $5, $6)',
+                        [interaction.guildId, nome, welcomeMessage, imageData, qty, priceParsed]
                     );
 
                     const finalEmbed = new EmbedBuilder()

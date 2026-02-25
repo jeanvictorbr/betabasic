@@ -833,6 +833,7 @@ const schema = {
         name: { type: 'VARCHAR(255)', notNull: true },
         welcome_message: { type: 'TEXT' }, // Detalhes e imagem
         quantity: { type: 'INTEGER', default: 0 },
+        image_data: { type: 'TEXT' }, // 👇 ADICIONE ESTA LINHA AQUI 👇
         price_kk: { type: 'NUMERIC(15, 2)', notNull: true }, // Salvo em formato numérico
         created_at: { type: 'TIMESTAMPTZ', default: 'NOW()' }
     },

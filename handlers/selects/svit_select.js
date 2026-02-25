@@ -1,4 +1,4 @@
-const { ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const db = require('../../database.js');
 const { formatKK } = require('../../utils/rpCurrency.js');
 const updateVitrine = require('../../utils/updateFerrariVitrine.js'); 
@@ -12,7 +12,6 @@ module.exports = {
         const res = await db.query('SELECT * FROM ferrari_stock_products WHERE id = $1 AND quantity > 0', [productId]);
         const product = res.rows[0];
 
-        // Reseta o Menu de Seleção visualmente atualizando a vitrine principal
         updateVitrine(interaction.client, interaction.guildId);
 
         if (!product) return interaction.editReply('❌ Este produto esgotou ou não existe mais!');
@@ -53,12 +52,24 @@ module.exports = {
                 new ButtonBuilder().setCustomId('fc_cancel').setLabel('Cancelar (Staff)').setStyle(ButtonStyle.Danger).setEmoji('❌')
             );
 
-            // 1º ENVIA A BUROCRACIA (Painel de botões e ping de cargo)
+            // 1º ENVIA O PAINEL DA STAFF NO TOPO
             await cartChannel.send({ content: `||<@${interaction.user.id}> | ${staffPing}||`, embeds: [cartPanelEmbed], components: [actionRow] });
 
-            // 2º ENVIA A VITRINE/DIDÁTICA POR ÚLTIMO (Embaixo de tudo)
+            // 2º RECONSTRÓI A IMAGEM E MANDA LÁ EMBAIXO
+            const welcomeOptions = {};
             if (product.welcome_message && product.welcome_message.trim() !== '') {
-                await cartChannel.send({ content: product.welcome_message });
+                welcomeOptions.content = product.welcome_message;
+            }
+            if (product.image_data) {
+                // Transforma o Base64 em Arquivo/Buffer novamente
+                const buffer = Buffer.from(product.image_data, 'base64');
+                const file = new AttachmentBuilder(buffer, { name: 'produto.png' });
+                welcomeOptions.files = [file];
+            }
+
+            // Envia a mensagem didática e a imagem se elas existirem
+            if (welcomeOptions.content || welcomeOptions.files) {
+                await cartChannel.send(welcomeOptions);
             }
 
         } catch (e) {
