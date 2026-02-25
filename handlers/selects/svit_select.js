@@ -1,7 +1,7 @@
 const { ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../../database.js');
 const { formatKK } = require('../../utils/rpCurrency.js');
-const updateVitrine = require('../../utils/updateFerrariVitrine.js'); // Importamos o motor
+const updateVitrine = require('../../utils/updateFerrariVitrine.js'); 
 
 module.exports = {
     customId: 'svit_select',
@@ -18,28 +18,43 @@ module.exports = {
         if (!product) return interaction.editReply('❌ Este produto esgotou ou não existe mais!');
 
         const staffRoleId = guildSettings?.ferrari_staff_role;
-        if (!staffRoleId) return interaction.editReply('❌ O cargo Staff não foi configurado. Peça ao admin para usar /ferrari-config');
+        const staffPing = staffRoleId ? `<@&${staffRoleId}>` : '@here';
 
         try {
+            // Cria as permissões dinamicamente
+            const permissionOverwrites = [
+                { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+            ];
+
+            // Só adiciona a staff no carrinho se o admin configurou um cargo
+            if (staffRoleId) {
+                permissionOverwrites.push({ id: staffRoleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
+            }
+
+            // Cria um canal privado (Carrinho/Ticket)
             const cartChannel = await interaction.guild.channels.create({
                 name: `🛒・compra-${interaction.user.username}`,
                 type: ChannelType.GuildText,
-                permissionOverwrites: [
-                    { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-                    { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-                    { id: staffRoleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-                ]
+                permissionOverwrites: permissionOverwrites
             });
 
             await interaction.editReply(`🛒 Seu carrinho foi aberto: <#${cartChannel.id}>`);
 
-            const welcomeEmbed = new EmbedBuilder()
-                .setTitle(`Pedido: ${product.name}`)
-                .setDescription(product.welcome_message || `Obrigado! Nossa equipe já vai te atender.`)
+            // 🚀 MÁGICA AQUI: Manda a Saudação Fora da Embed para ler Imagens e Formatações Grandes
+            if (product.welcome_message && product.welcome_message.trim() !== '') {
+                await cartChannel.send({ content: product.welcome_message });
+            }
+
+            // Em seguida, manda o Painel de Controle com os Botões
+            const cartPanelEmbed = new EmbedBuilder()
+                .setTitle(`Gerenciar Pedido: ${product.name}`)
+                .setDescription('Sua reserva está garantida enquanto este carrinho estiver aberto. Efetue o pagamento com a Staff e clique no botão abaixo quando concluir.')
                 .addFields(
                     { name: 'Valor a Pagar', value: formatKK(Number(product.price_kk)), inline: true },
                     { name: 'Estoque Restante', value: product.quantity.toString(), inline: true }
-                ).setColor('#2ECC71');
+                )
+                .setColor('#2ECC71');
 
             const actionRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('fc_paid').setLabel('Já Paguei').setStyle(ButtonStyle.Success).setEmoji('💸'),
@@ -47,7 +62,8 @@ module.exports = {
                 new ButtonBuilder().setCustomId('fc_cancel').setLabel('Cancelar (Staff)').setStyle(ButtonStyle.Danger).setEmoji('❌')
             );
 
-            await cartChannel.send({ content: `||<@${interaction.user.id}> | <@&${staffRoleId}>||`, embeds: [welcomeEmbed], components: [actionRow] });
+            // Marca o jogador e a staff de forma "invisível" para dar ping no celular
+            await cartChannel.send({ content: `||<@${interaction.user.id}> | ${staffPing}||`, embeds: [cartPanelEmbed], components: [actionRow] });
 
         } catch (e) {
             console.error(e);

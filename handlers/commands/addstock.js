@@ -1,14 +1,14 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../../database.js');
 const { parseKK } = require('../../utils/rpCurrency.js');
-const updateVitrine = require('../../utils/updateFerrariVitrine.js'); // <-- AQUI ESTÁ O IMPORT QUE FALTAVA!
+const updateVitrine = require('../../utils/updateFerrariVitrine.js'); 
 
 module.exports = async (interaction, guildSettings) => {
     const nome = interaction.options.getString('nome');
     
     const embedStart = new EmbedBuilder()
         .setTitle('📦 Configuração de Novo Estoque')
-        .setDescription(`Você está adicionando o produto: **${nome}**\n\nO próximo passo é configurar a **Mensagem de Saudação** (aquela que aparece quando o cliente abre o carrinho). Você pode incluir links de imagens nela.\n\nClique no botão abaixo quando estiver pronto para digitar a mensagem.`)
+        .setDescription(`Você está adicionando o produto: **${nome}**\n\nO próximo passo é configurar a **Mensagem de Saudação** (aquela que aparece quando o cliente abre o carrinho). Você pode incluir links de imagens ou enviar o arquivo da foto junto com o texto nela.\n\nClique no botão abaixo quando estiver pronto para digitar a mensagem.`)
         .setColor('#2ECC71');
 
     const row = new ActionRowBuilder().addComponents(
@@ -27,7 +27,14 @@ module.exports = async (interaction, guildSettings) => {
             const msgCollector = interaction.channel.createMessageCollector({ filter: m => m.author.id === interaction.user.id, max: 1, time: 120000 });
             
             msgCollector.on('collect', async msg => {
-                const welcomeMessage = msg.content;
+                let welcomeMessage = msg.content;
+                
+                // SÊNIOR: Se o admin fez upload de foto, o bot captura a URL da foto!
+                if (msg.attachments.size > 0) {
+                    const attachment = msg.attachments.first();
+                    welcomeMessage += `\n${attachment.url}`;
+                }
+
                 await msg.delete().catch(()=>{});
 
                 await interaction.followUp({ content: '✅ Saudação salva! Agora, digite a **Quantidade** e o **Preço em KK** separados por espaço. Exemplo: `5 1.5KK` (5 unidades a 1.5 milhões cada).' });
@@ -63,7 +70,7 @@ module.exports = async (interaction, guildSettings) => {
 
                     await interaction.followUp({ embeds: [finalEmbed] });
 
-                    // ATUALIZA A VITRINE AO VIVO PARA OS CLIENTES
+                    // Atualiza a vitrine ao vivo para os clientes
                     await updateVitrine(interaction.client, interaction.guildId);
                 });
             });
