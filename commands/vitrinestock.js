@@ -1,50 +1,54 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const db = require('../database.js');
-const { formatKK } = require('../utils/rpCurrency.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
+const db = require('../../database.js');
+const { formatKK } = require('../../utils/rpCurrency.js');
 
-module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('vitrinestock')
-        .setDescription('[Loja Stock] Envia a vitrine do estoque adicionado manualmente'),
-    adminOnly: true,
-    async execute(interaction) {
-        // Busca o estoque disponível
-        const res = await db.query('SELECT * FROM ferrari_stock_products WHERE guild_id = $1 AND quantity > 0 ORDER BY id ASC', [interaction.guildId]);
-        
-        if (res.rows.length === 0) return interaction.reply({ content: '❌ Nenhum produto em estoque. Use /addstock primeiro.', ephemeral: true });
+module.exports = async (interaction, guildSettings) => {
+    const res = await db.query('SELECT * FROM ferrari_stock_products WHERE guild_id = $1 AND quantity > 0 ORDER BY id ASC', [interaction.guildId]);
+    if (res.rows.length === 0) return interaction.reply({ content: '❌ Nenhum produto em estoque.', ephemeral: true });
 
-        const embed = new EmbedBuilder()
-            .setTitle('🚘 Loja Premium | Estoque Imediato')
-            .setDescription('Confira nossos veículos a pronta entrega! Clique no botão correspondente abaixo para reservar/comprar o seu.')
-            .setColor('#2b2d31')
-            .setImage('https://i.imgur.com/YOUR_IMAGE_HERE.png');
+    // Configurações personalizadas (Fallback para os defaults)
+    const title = guildSettings?.ferrari_vitrine_title || '🚘 Loja Premium | Estoque Imediato';
+    const desc = guildSettings?.ferrari_vitrine_desc || 'Confira nossos veículos a pronta entrega!';
+    const img = guildSettings?.ferrari_vitrine_image || null;
 
-        let msgFields = '';
-        const components = [];
-        let currentRow = new ActionRowBuilder();
+    const embed = new EmbedBuilder()
+        .setTitle(title)
+        .setDescription(desc)
+        .setColor('#2b2d31');
+    if (img && img.startsWith('http')) embed.setImage(img);
 
-        res.rows.forEach((prod, index) => {
-            msgFields += `**${index + 1}. ${prod.name}**\n└ 📦 Unidades: \`${prod.quantity}\` | 💰 Preço: **${formatKK(Number(prod.price_kk))}**\n\n`;
-            
-            // Adiciona botões dinâmicos (Máx 5 por row)
-            if (currentRow.components.length === 5) {
-                components.push(currentRow);
-                currentRow = new ActionRowBuilder();
-            }
-            
-            currentRow.addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`sbuy_${prod.id}`) // sbuy = Stock Buy
-                    .setLabel(`Comprar #${index + 1}`)
-                    .setStyle(ButtonStyle.Success)
-            );
-        });
+    // Pegamos apenas a Página 1 (0 a 25)
+    const page = 0;
+    const chunk = res.rows.slice(page * 25, (page + 1) * 25);
+    
+    let msgFields = '';
+    chunk.forEach((prod, index) => {
+        msgFields += `**${(page * 25) + index + 1}. ${prod.name}**\n└ 📦 Estoque: \`${prod.quantity}\` | 💰 Preço: **${formatKK(Number(prod.price_kk))}**\n\n`;
+    });
+    embed.addFields({ name: 'Disponíveis nesta página', value: msgFields });
 
-        if (currentRow.components.length > 0) components.push(currentRow);
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId(`svit_select`)
+        .setPlaceholder('Escolha o veículo que deseja comprar...')
+        .addOptions(chunk.map(prod => ({
+            label: prod.name,
+            description: `Valor: ${formatKK(Number(prod.price_kk))} | Estoque: ${prod.quantity}`,
+            value: prod.id.toString(),
+            emoji: '🛒'
+        })));
 
-        embed.addFields({ name: 'Veículos Disponíveis', value: msgFields });
+    const rowSelect = new ActionRowBuilder().addComponents(selectMenu);
+    const components = [rowSelect];
 
-        await interaction.channel.send({ embeds: [embed], components: components });
-        await interaction.reply({ content: '✅ Vitrine de Stock enviada.', ephemeral: true });
+    // Se tiver mais de 25, adiciona botão de paginação
+    if (res.rows.length > 25) {
+        const rowBtns = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`svit_page_${page - 1}`).setLabel('◀ Anterior').setStyle(ButtonStyle.Secondary).setDisabled(true),
+            new ButtonBuilder().setCustomId(`svit_page_${page + 1}`).setLabel('Próxima ▶').setStyle(ButtonStyle.Primary)
+        );
+        components.push(rowBtns);
     }
+
+    await interaction.channel.send({ embeds: [embed], components: components });
+    await interaction.reply({ content: '✅ Vitrine de Stock enviada.', ephemeral: true });
 };

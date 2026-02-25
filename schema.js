@@ -186,7 +186,12 @@ const schema = {
         
         // Sorteios
         giveaway_log_channel_id: { type: 'VARCHAR(255)' },
+
         ferrari_log_channel: { type: 'VARCHAR(255)' },
+        ferrari_staff_role: { type: 'VARCHAR(255)' }, // Quem pode usar config, addstock, stats e aprovar carrinhos
+        ferrari_vitrine_title: { type: 'VARCHAR(255)', default: '🚘 Loja Premium | Estoque Imediato' },
+        ferrari_vitrine_desc: { type: 'TEXT', default: 'Confira nossos veículos a pronta entrega! Selecione no menu abaixo.' },
+        ferrari_vitrine_image: { type: 'VARCHAR(1024)' },
         
         // Registros
         registros_status: { type: 'BOOLEAN', default: true },
