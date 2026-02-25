@@ -17,7 +17,6 @@ module.exports = async (interaction, guildSettings) => {
 
     const response = await interaction.reply({ embeds: [embedStart], components: [row] });
 
-    // Coletor de Botão
     const collector = response.createMessageComponentCollector({ filter: i => i.user.id === interaction.user.id, time: 60000 });
 
     collector.on('collect', async i => {
@@ -29,15 +28,15 @@ module.exports = async (interaction, guildSettings) => {
             msgCollector.on('collect', async msg => {
                 let welcomeMessage = msg.content;
                 
-                // SÊNIOR: Se o admin fez upload de foto, o bot captura a URL da foto!
                 if (msg.attachments.size > 0) {
                     const attachment = msg.attachments.first();
                     welcomeMessage += `\n${attachment.url}`;
                 }
 
-                await msg.delete().catch(()=>{});
+                // A MÁGICA AQUI: O bot NÃO apaga mais a mensagem. Assim o link do Discord nunca quebra!
+                await msg.react('📸').catch(()=>{});
 
-                await interaction.followUp({ content: '✅ Saudação salva! Agora, digite a **Quantidade** e o **Preço em KK** separados por espaço. Exemplo: `5 1.5KK` (5 unidades a 1.5 milhões cada).' });
+                await interaction.followUp({ content: '✅ Saudação salva! (Sua mensagem não foi apagada para manter a imagem ativa). Agora, digite a **Quantidade** e o **Preço em KK** separados por espaço. Exemplo: `5 1.5KK`' });
 
                 const mathCollector = interaction.channel.createMessageCollector({ filter: m => m.author.id === interaction.user.id, max: 1, time: 60000 });
 
@@ -53,7 +52,6 @@ module.exports = async (interaction, guildSettings) => {
 
                     const priceParsed = parseKK(priceText);
 
-                    // Salva no Banco de Dados
                     await db.query(
                         'INSERT INTO ferrari_stock_products (guild_id, name, welcome_message, quantity, price_kk) VALUES ($1, $2, $3, $4, $5)',
                         [interaction.guildId, nome, welcomeMessage, qty, priceParsed]
@@ -70,7 +68,6 @@ module.exports = async (interaction, guildSettings) => {
 
                     await interaction.followUp({ embeds: [finalEmbed] });
 
-                    // Atualiza a vitrine ao vivo para os clientes
                     await updateVitrine(interaction.client, interaction.guildId);
                 });
             });

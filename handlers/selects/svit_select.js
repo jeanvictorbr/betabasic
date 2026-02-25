@@ -21,18 +21,15 @@ module.exports = {
         const staffPing = staffRoleId ? `<@&${staffRoleId}>` : '@here';
 
         try {
-            // Cria as permissões dinamicamente
             const permissionOverwrites = [
                 { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
                 { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
             ];
 
-            // Só adiciona a staff no carrinho se o admin configurou um cargo
             if (staffRoleId) {
                 permissionOverwrites.push({ id: staffRoleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
             }
 
-            // Cria um canal privado (Carrinho/Ticket)
             const cartChannel = await interaction.guild.channels.create({
                 name: `🛒・compra-${interaction.user.username}`,
                 type: ChannelType.GuildText,
@@ -41,12 +38,6 @@ module.exports = {
 
             await interaction.editReply(`🛒 Seu carrinho foi aberto: <#${cartChannel.id}>`);
 
-            // 🚀 MÁGICA AQUI: Manda a Saudação Fora da Embed para ler Imagens e Formatações Grandes
-            if (product.welcome_message && product.welcome_message.trim() !== '') {
-                await cartChannel.send({ content: product.welcome_message });
-            }
-
-            // Em seguida, manda o Painel de Controle com os Botões
             const cartPanelEmbed = new EmbedBuilder()
                 .setTitle(`Gerenciar Pedido: ${product.name}`)
                 .setDescription('Sua reserva está garantida enquanto este carrinho estiver aberto. Efetue o pagamento com a Staff e clique no botão abaixo quando concluir.')
@@ -62,8 +53,13 @@ module.exports = {
                 new ButtonBuilder().setCustomId('fc_cancel').setLabel('Cancelar (Staff)').setStyle(ButtonStyle.Danger).setEmoji('❌')
             );
 
-            // Marca o jogador e a staff de forma "invisível" para dar ping no celular
+            // 1º ENVIA A BUROCRACIA (Painel de botões e ping de cargo)
             await cartChannel.send({ content: `||<@${interaction.user.id}> | ${staffPing}||`, embeds: [cartPanelEmbed], components: [actionRow] });
+
+            // 2º ENVIA A VITRINE/DIDÁTICA POR ÚLTIMO (Embaixo de tudo)
+            if (product.welcome_message && product.welcome_message.trim() !== '') {
+                await cartChannel.send({ content: product.welcome_message });
+            }
 
         } catch (e) {
             console.error(e);
