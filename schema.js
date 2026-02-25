@@ -186,6 +186,7 @@ const schema = {
         
         // Sorteios
         giveaway_log_channel_id: { type: 'VARCHAR(255)' },
+        ferrari_log_channel: { type: 'VARCHAR(255)' },
         
         // Registros
         registros_status: { type: 'BOOLEAN', default: true },
@@ -817,6 +818,31 @@ const schema = {
         trigger_channel_id: { type: 'VARCHAR(255)', notNull: true },
         category_id: { type: 'VARCHAR(255)' },
         default_limit: { type: 'INTEGER', default: 0 }
+    },
+    // --- LOJA INDEPENDENTE (STOCK STORE) ---
+    ferrari_stock_products: {
+        id: { type: 'SERIAL', primaryKey: true },
+        guild_id: { type: 'VARCHAR(255)', notNull: true },
+        name: { type: 'VARCHAR(255)', notNull: true },
+        welcome_message: { type: 'TEXT' }, // Detalhes e imagem
+        quantity: { type: 'INTEGER', default: 0 },
+        price_kk: { type: 'NUMERIC(15, 2)', notNull: true }, // Salvo em formato numérico
+        created_at: { type: 'TIMESTAMPTZ', default: 'NOW()' }
+    },
+
+    // --- MÓDULO FERRARI (INTERMEDIAÇÃO DE VEÍCULOS) ---
+    ferrari_sales_log: {
+        id: { type: 'SERIAL', primaryKey: true },
+        guild_id: { type: 'VARCHAR(255)', notNull: true },
+        user_id: { type: 'VARCHAR(255)', notNull: true }, // Quem vendeu
+        vehicle_name: { type: 'VARCHAR(255)', notNull: true },
+        category: { type: 'VARCHAR(100)', notNull: true },
+        client_info: { type: 'VARCHAR(255)' }, // Nick ou ID do comprador
+        sale_type: { type: 'VARCHAR(50)', default: 'venda' }, // 'venda' ou 'troca'
+        price_bruto: { type: 'BIGINT', notNull: true }, // Valor total em números reais
+        price_caixa: { type: 'BIGINT', notNull: true }, // Valor do caixa
+        profit: { type: 'BIGINT', notNull: true }, // Lucro do corretor
+        created_at: { type: 'TIMESTAMPTZ', default: 'NOW()' }
     },
     temp_voices: {
         channel_id: { type: 'VARCHAR(255)', primaryKey: true },
