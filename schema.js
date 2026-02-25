@@ -176,9 +176,7 @@ const schema = {
         // Configs Gerais
         bot_enabled_in_guild: { type: 'BOOLEAN', default: true },
         maintenance_message_guild: { type: 'TEXT' },
-        // --- CONFIGURAÇÃO: MENSAGENS DE TICKET ---
-        tickets_greeting_message: { type: 'TEXT' },
-        tickets_greeting_title: { type: 'VARCHAR(255)' },
+        
         // Ausências
         ausencias_canal_aprovacoes: { type: 'VARCHAR(255)' },
         ausencias_cargo_ausente: { type: 'VARCHAR(255)' },

@@ -949,22 +949,51 @@ client.on(Events.MessageCreate, async (message) => {
 
             if (!aiResponse) return await message.channel.send("❌ A IA não conseguiu processar a sua mensagem. Tente novamente.");
 
-            const jsonMatch = aiResponse.match(/```json\n([\s\S]*?)\n```/);
-            if (jsonMatch && jsonMatch[1]) {
-                const jsonBlueprint = JSON.parse(jsonMatch[1]);
-                
+            // ===================================================================
+            //  ⬇️  CORREÇÃO ROBUSTA DE PARSING JSON (ARQUITETO)  ⬇️
+            // ===================================================================
+            let jsonBlueprint = null;
+            
+            // 1. Limpeza preliminar: Remove blocos de código Markdown se existirem
+            // Aceita ```json, ```JSON, ou apenas ```
+            const codeBlockRegex = /```(?:json|JSON)?\s*([\s\S]*?)\s*```/;
+            const codeBlockMatch = aiResponse.match(codeBlockRegex);
+            
+            // Se achou bloco de código, usa o conteúdo dele. Se não, usa a resposta inteira.
+            let textToParse = codeBlockMatch ? codeBlockMatch[1] : aiResponse;
+
+            // 2. Extração Cirúrgica: Busca o primeiro '{' e o último '}'
+            // Isso ignora prefixos como "Sugestões:" ou "Aqui está o JSON:"
+            const start = textToParse.indexOf('{');
+            const end = textToParse.lastIndexOf('}');
+
+            if (start !== -1 && end !== -1 && end > start) {
+                try {
+                    const jsonString = textToParse.substring(start, end + 1);
+                    jsonBlueprint = JSON.parse(jsonString);
+                } catch (e) {
+                    console.error("[Arquiteto] Falha ao parsear JSON (Tentativa 1):", e.message);
+                    console.error("[Arquiteto] String problemática:", textToParse.substring(start, end + 1));
+                    
+                    // Opcional: Tentativa desesperada de corrigir aspas quebradas se necessário
+                    // Mas geralmente o erro é apenas texto extra, que o substring resolve.
+                }
+            }
+
+            if (jsonBlueprint) {
+                // Atualiza o banco com o blueprint válido
                 await db.query("UPDATE architect_sessions SET blueprint = $1, status = 'pending_confirmation' WHERE channel_id = $2", [jsonBlueprint, message.channel.id]);
 
                 const rolesText = (jsonBlueprint.roles && jsonBlueprint.roles.length > 0) ? jsonBlueprint.roles.map(r => `• ${r.name} (${r.permissions})`).join('\n') : 'Nenhum cargo novo.';
-                const categoriesText = (jsonBlueprint.categories && jsonBlueprint.categories.length > 0) ? jsonBlueprint.categories.map(c => `📂 **${c.name}**\n   └─ Canais: ${c.channels.map(ch => `\`#${ch.name}\``).join(', ')}`).join('\n\n') : 'Nenhuma categoria nova.';
+                const categoriesText = (jsonBlueprint.categories && jsonBlueprint.categories.length > 0) ? jsonBlueprint.categories.map(c => `📂 **${c.name}**\n   └─ Canais: ${c.channels.map(ch => `\`#${ch.name}\``).join(', ')}`).join('\n\n') : (jsonBlueprint.channels ? `Canais soltos: ${jsonBlueprint.channels.map(ch => `\`#${ch.name}\``).join(', ')}` : 'Nenhuma categoria/canal.');
                 
                 const embed = {
                     title: isConsultantMode ? '📋 Plano de Adição Proposto' : '📋 Plano de Construção Proposto',
                     description: isConsultantMode ? 'Analisei seu pedido e sugiro **adicionar** o seguinte ao seu servidor. Nada será removido.' : 'Analisei seu pedido e preparei um plano completo para o seu novo servidor. O que acha?',
                     color: 3447003,
                     fields: [
-                        { name: '👑 Cargos a Serem Criados', value: rolesText },
-                        { name: '📂 Categorias e Canais a Serem Criados', value: categoriesText }
+                        { name: '👑 Cargos a Serem Criados', value: rolesText.substring(0, 1024) },
+                        { name: '📂 Estrutura a Ser Criada', value: categoriesText.substring(0, 1024) }
                     ]
                 };
 
@@ -980,11 +1009,16 @@ client.on(Events.MessageCreate, async (message) => {
                 await message.channel.send({ embeds: [embed], components: [actionRow] });
 
             } else {
+                // Se falhou TOTALMENTE o parsing (não achou {} válidos), envia o texto cru.
+                // Isso permite que você veja o erro, mas o substring acima deve pegar 99% dos casos.
                 await message.channel.send(aiResponse);
+                
                 const newHistory = [...chatHistory, { role: 'user', content: message.content }, { role: 'assistant', content: aiResponse }];
                 await db.query('UPDATE architect_sessions SET chat_history = $1 WHERE channel_id = $2', [JSON.stringify(newHistory), message.channel.id]);
             }
-
+            // ===================================================================
+            //  ⬆️  FIM DA CORREÇÃO ⬆️
+            // ===================================================================
         } catch (error) {
             console.error("[Arquiteto/Consultor Conversa] Erro:", error);
             await message.channel.send("❌ Ocorreu um erro crítico. A IA pode estar indisponível ou o plano gerado é inválido.");
