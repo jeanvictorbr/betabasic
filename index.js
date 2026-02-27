@@ -3,7 +3,7 @@
 require('dotenv').config();
 
 const fs = require('node:fs');
-
+const startApi = require('./api.js');
 const { checkExpiringFeatures } = require('./utils/premiumExpiryMonitor.js');
 const { startPurgeMonitor } = require('./utils/purgeMonitor');
 const { checkTokenUsage } = require('./utils/tokenMonitor.js');
@@ -390,7 +390,7 @@ console.log('--- Handlers Carregados ---');
 
 client.once(Events.ClientReady, async () => {
     startPontoUpdateLoop(client);
-   
+   startApi(client);
     startGiveawayMonitor(client);
     startVerificationLoop(client);
     startStatsMonitor(client);
