@@ -40,15 +40,35 @@ module.exports = (client) => {
     // ==========================================
     // 🔄 LOOP DE FILA (Assíncrono) - CRIA CARRINHO E ANOTA NO DB
     // ==========================================
+    console.log("[WebQueue] 🔄 Iniciando monitoramento de pedidos via Banco de Dados...");
+
+    // 🔴 FORÇAR CRIAÇÃO DA TABELA PELO BOT (Garante que os dois estejam lendo o mesmo caderno)
+    db.query(`CREATE TABLE IF NOT EXISTS web_cart_requests (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(50) NOT NULL,
+        product_id INTEGER NOT NULL,
+        guild_id VARCHAR(50) NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        channel_url VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`).then(() => {
+        console.log("[WebQueue] ✅ Tabela de pedidos sincronizada com sucesso!");
+    }).catch(err => {
+        console.error("[WebQueue] ❌ Erro ao criar tabela:", err.message);
+    });
+
     setInterval(async () => {
         try {
-            const tableCheck = await db.query("SELECT to_regclass('public.web_cart_requests')");
-            if (!tableCheck.rows[0].to_regclass) return;
-
+            // Buscando pedidos
             const pendingReqs = await db.query("SELECT * FROM web_cart_requests WHERE status = 'pending' LIMIT 5");
             
+            if (pendingReqs.rows.length > 0) {
+                console.log(`[WebQueue] 🛒 Encontrado(s) ${pendingReqs.rows.length} pedido(s) pendente(s)! Processando...`);
+            }
+
             for (const req of pendingReqs.rows) {
                 const { id, user_id, product_id, guild_id } = req;
+                
                 await db.query("UPDATE web_cart_requests SET status = 'processing' WHERE id = $1", [id]);
 
                 try {
@@ -103,7 +123,7 @@ module.exports = (client) => {
 
                     await cartChannel.send({ content: `||<@${user_id}> ${staffRoleId ? `<@&${staffRoleId}>` : ''}||`, embeds: [embed], components: [row] });
 
-                    // 3. 🔴 O PULO DO GATO: FORÇA A GRAVAÇÃO DO LINK NO BANCO
+                    // 3. SALVA O LINK NO BANCO E AVISA
                     const channelUrl = `https://discord.com/channels/${guild.id}/${cartChannel.id}`;
                     
                     const updateResult = await db.query(
@@ -112,17 +132,21 @@ module.exports = (client) => {
                     );
 
                     if (updateResult.rowCount > 0) {
-                        console.log(`[WebQueue] ✅ Carrinho Salvo no Banco! Link: ${channelUrl}`);
-                        io.emit(`pedido_pronto_${id}`, { url: channelUrl }); // Dispara o Websocket como plano A
+                        console.log(`[WebQueue] ✅ Carrinho Salvo no Banco com sucesso! ID da transação: ${id}`);
+                        io.emit(`pedido_pronto_${id}`, { url: channelUrl }); 
                     } else {
-                        console.log(`[WebQueue] ❌ ERRO: Não conseguiu salvar o link no Banco para o ID ${id}`);
+                        console.log(`[WebQueue] ❌ ERRO MISTÉRIO: Não conseguiu salvar o link no Banco para o ID ${id}`);
                     }
 
                 } catch (innerErr) {
                     await db.query("UPDATE web_cart_requests SET status = 'failed' WHERE id = $1", [id]);
+                    console.error(`[WebQueue] ❌ Erro ao criar o canal do pedido ${id}:`, innerErr.message);
                     io.emit(`pedido_erro_${id}`, { error: innerErr.message });
                 }
             }
-        } catch (error) {}
-    }, 2000); // Mais rápido! Deixei para verificar a cada 2s
+        } catch (error) {
+            // AGORA ELE VAI GRITAR O ERRO DO BANCO SE DER M*RDA!
+            console.error("[WebQueue] ❌ ERRO CRÍTICO NO LOOP DO BANCO DE DADOS:", error.message);
+        }
+    }, 2000); 
 };
