@@ -38,28 +38,40 @@ module.exports = (client) => {
     expressServer.listen(process.env.PORT || 8080, '0.0.0.0', () => console.log(`[API MESTRE] 🚀 Express + Socket.io Rodando`));
 
     // ==========================================
+    // 🛠️ AUTO-REPARO DO BANCO DE DADOS
+    // ==========================================
+    async function setupDatabase() {
+        try {
+            // Garante que a tabela base existe
+            await db.query(`CREATE TABLE IF NOT EXISTS web_cart_requests (
+                id SERIAL PRIMARY KEY,
+                user_id VARCHAR(50) NOT NULL,
+                product_id INTEGER NOT NULL,
+                guild_id VARCHAR(50) NOT NULL,
+                status VARCHAR(20) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`);
+
+            // Força a injeção da coluna channel_url (Ignora o erro se ela já existir)
+            await db.query(`ALTER TABLE web_cart_requests ADD COLUMN channel_url VARCHAR(255)`).catch(() => {});
+            
+            console.log("[WebQueue] ✅ Tabela de pedidos sincronizada e reparada com sucesso!");
+        } catch (err) {
+            console.error("[WebQueue] ❌ Erro ao reparar tabela:", err.message);
+        }
+    }
+    
+    // Chama o auto-reparo assim que o bot liga
+    setupDatabase();
+
+    // ==========================================
     // 🔄 LOOP DE FILA (Assíncrono) - CRIA CARRINHO E ANOTA NO DB
     // ==========================================
     console.log("[WebQueue] 🔄 Iniciando monitoramento de pedidos via Banco de Dados...");
 
-    // 🔴 FORÇAR CRIAÇÃO DA TABELA PELO BOT (Garante que os dois estejam lendo o mesmo caderno)
-    db.query(`CREATE TABLE IF NOT EXISTS web_cart_requests (
-        id SERIAL PRIMARY KEY,
-        user_id VARCHAR(50) NOT NULL,
-        product_id INTEGER NOT NULL,
-        guild_id VARCHAR(50) NOT NULL,
-        status VARCHAR(20) DEFAULT 'pending',
-        channel_url VARCHAR(255),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`).then(() => {
-        console.log("[WebQueue] ✅ Tabela de pedidos sincronizada com sucesso!");
-    }).catch(err => {
-        console.error("[WebQueue] ❌ Erro ao criar tabela:", err.message);
-    });
-
     setInterval(async () => {
         try {
-            // Buscando pedidos
+            // Buscando pedidos pendentes
             const pendingReqs = await db.query("SELECT * FROM web_cart_requests WHERE status = 'pending' LIMIT 5");
             
             if (pendingReqs.rows.length > 0) {
@@ -98,7 +110,7 @@ module.exports = (client) => {
                         permissionOverwrites: perm 
                     });
 
-                    // 2. Manda a mensagem
+                    // 2. Manda a mensagem e foto
                     if (product.welcome_message || product.image_data) {
                         const welcomeOptions = {};
                         if (product.welcome_message) welcomeOptions.content = product.welcome_message;
@@ -123,7 +135,7 @@ module.exports = (client) => {
 
                     await cartChannel.send({ content: `||<@${user_id}> ${staffRoleId ? `<@&${staffRoleId}>` : ''}||`, embeds: [embed], components: [row] });
 
-                    // 3. SALVA O LINK NO BANCO E AVISA
+                    // 3. SALVA O LINK NO BANCO (AGORA VAI FUNCIONAR PORQUE A COLUNA EXISTE)
                     const channelUrl = `https://discord.com/channels/${guild.id}/${cartChannel.id}`;
                     
                     const updateResult = await db.query(
@@ -132,10 +144,10 @@ module.exports = (client) => {
                     );
 
                     if (updateResult.rowCount > 0) {
-                        console.log(`[WebQueue] ✅ Carrinho Salvo no Banco com sucesso! ID da transação: ${id}`);
+                        console.log(`[WebQueue] ✅ Carrinho Salvo no Banco com sucesso! Link: ${channelUrl}`);
                         io.emit(`pedido_pronto_${id}`, { url: channelUrl }); 
                     } else {
-                        console.log(`[WebQueue] ❌ ERRO MISTÉRIO: Não conseguiu salvar o link no Banco para o ID ${id}`);
+                        console.log(`[WebQueue] ❌ ERRO: Não conseguiu atualizar o status no Banco para o ID ${id}`);
                     }
 
                 } catch (innerErr) {
@@ -145,7 +157,6 @@ module.exports = (client) => {
                 }
             }
         } catch (error) {
-            // AGORA ELE VAI GRITAR O ERRO DO BANCO SE DER M*RDA!
             console.error("[WebQueue] ❌ ERRO CRÍTICO NO LOOP DO BANCO DE DADOS:", error.message);
         }
     }, 2000); 
