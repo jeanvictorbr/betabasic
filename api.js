@@ -24,8 +24,9 @@ module.exports = (client) => {
     // Rota de Teste Base
     app.get('/', (req, res) => res.send('✅ API KODA OPERANTE'));
 
-    // Rota para o carrinho (sem Array de rota, usando o default do express puro)
-    app.post('/api/criar-carrinho', async (req, res) => {
+    // 🔴 ROTAS BLINDADAS (Array para evitar o 404 da Discloud)
+
+    app.post(['/api/criar-carrinho', '/criar-carrinho'], async (req, res) => {
         console.log("[API] Recebeu pedido de carrinho:", req.body);
         const { userId, productId, guildId } = req.body;
         try {
@@ -85,7 +86,7 @@ module.exports = (client) => {
         }
     });
 
-    app.get('/api/admin/check/:guildId/:userId', async (req, res) => {
+    app.get(['/api/admin/check/:guildId/:userId', '/admin/check/:guildId/:userId'], async (req, res) => {
         try {
             const { guildId, userId } = req.params;
             const guild = client.guilds.cache.get(guildId);
@@ -110,7 +111,7 @@ module.exports = (client) => {
         }
     });
 
-    app.post('/api/admin/add', async (req, res) => {
+    app.post(['/api/admin/add', '/admin/add'], async (req, res) => {
         try {
             const { guildId, name, welcome_message, image_data, quantity, price_kk } = req.body;
             await db.query(
@@ -127,7 +128,7 @@ module.exports = (client) => {
         }
     });
 
-    app.delete('/api/admin/remove/:id', async (req, res) => {
+    app.delete(['/api/admin/remove/:id', '/admin/remove/:id'], async (req, res) => {
         try {
             const { id } = req.params;
             const { guildId } = req.body;
