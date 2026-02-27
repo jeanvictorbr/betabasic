@@ -55,7 +55,12 @@ module.exports = async (client, guildId) => {
 
         // Edita a mensagem da vitrine viva!
         await message.edit({ embeds: [embed], components: components });
-
+// 👇 A MÁGICA DO WEBSOCKET AQUI 👇
+        // Dispara um sinal para todos os sites conectados recarregarem a lista de carros!
+        if (client.io) {
+            client.io.emit('estoque_atualizado');
+            console.log('[WebSocket] Sinal de atualização enviado para o site!');
+        }
     } catch (e) {
         console.error('[Update Vitrine] Erro ao atualizar vitrine:', e);
     }
