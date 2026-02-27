@@ -111,6 +111,7 @@ module.exports = (client) => {
         }
     });
 
+// 🟢 ADICIONAR VEÍCULO
     app.post(['/api/admin/add', '/admin/add'], async (req, res) => {
         try {
             const { guildId, name, welcome_message, image_data, quantity, price_kk } = req.body;
@@ -124,22 +125,54 @@ module.exports = (client) => {
             client.io.emit('estoque_atualizado'); 
             res.json({ success: true });
         } catch (e) {
-            res.status(500).json({ error: 'Erro' });
+            console.error(e);
+            res.status(500).json({ error: 'Erro ao adicionar' });
         }
     });
 
-    app.delete(['/api/admin/remove/:id', '/admin/remove/:id'], async (req, res) => {
+    // 🟡 EDITAR VEÍCULO (NOVA FEATURE!)
+    app.put(['/api/admin/edit/:guildId/:id', '/admin/edit/:guildId/:id'], async (req, res) => {
         try {
-            const { id } = req.params;
-            const { guildId } = req.body;
-            await db.query('DELETE FROM ferrari_stock_products WHERE id = $1', [id]);
+            const { guildId, id } = req.params;
+            const { name, welcome_message, image_data, quantity, price_kk } = req.body;
+            
+            if (image_data) {
+                // Se mandou imagem nova, atualiza tudo
+                await db.query(
+                    'UPDATE ferrari_stock_products SET name = $1, welcome_message = $2, image_data = $3, quantity = $4, price_kk = $5 WHERE id = $6 AND guild_id = $7',
+                    [name, welcome_message, image_data, quantity, price_kk, id, guildId]
+                );
+            } else {
+                // Se não mandou imagem, atualiza só os textos e valores
+                await db.query(
+                    'UPDATE ferrari_stock_products SET name = $1, welcome_message = $2, quantity = $3, price_kk = $4 WHERE id = $5 AND guild_id = $6',
+                    [name, welcome_message, quantity, price_kk, id, guildId]
+                );
+            }
+            
+            const updateVitrine = require('./utils/updateFerrariVitrine.js');
+            await updateVitrine(client, guildId);
+            client.io.emit('estoque_atualizado'); 
+            res.json({ success: true });
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ error: 'Erro ao editar' });
+        }
+    });
+
+    // 🔴 DELETAR VEÍCULO (Corrigido para burlar o firewall da Discloud)
+    app.delete(['/api/admin/remove/:guildId/:id', '/admin/remove/:guildId/:id'], async (req, res) => {
+        try {
+            const { guildId, id } = req.params;
+            await db.query('DELETE FROM ferrari_stock_products WHERE id = $1 AND guild_id = $2', [id, guildId]);
             
             const updateVitrine = require('./utils/updateFerrariVitrine.js');
             await updateVitrine(client, guildId);
             client.io.emit('estoque_atualizado');
             res.json({ success: true });
         } catch (e) {
-            res.status(500).json({ error: 'Erro' });
+            console.error(e);
+            res.status(500).json({ error: 'Erro ao deletar' });
         }
     });
 
