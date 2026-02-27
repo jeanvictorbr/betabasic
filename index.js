@@ -628,8 +628,8 @@ io.on('connection', (socket) => {
     console.log(`[WebSocket] 🌐 Cliente Web Conectado: ${socket.id}`);
 });
 
-// 🔴 ROTAS DO MÓDULO FERRARI (SITE)
-app.get('/api/produtos/:guildId', async (req, res) => {
+// 🔴 ROTAS DO MÓDULO FERRARI (SITE) - Agora com roteamento duplo!
+app.get(['/api/produtos/:guildId', '/produtos/:guildId'], async (req, res) => {
     try {
         const { guildId } = req.params;
         const result = await db.query('SELECT * FROM ferrari_stock_products WHERE guild_id = $1 AND quantity > 0 ORDER BY id ASC', [guildId]);
@@ -638,7 +638,13 @@ app.get('/api/produtos/:guildId', async (req, res) => {
         res.status(500).json({ error: 'Erro ao buscar produtos' });
     }
 });
+// Rota Base para testar se a API está online de fora
+app.get('/', (req, res) => {
+    res.send('✅ API do Koda V2 está ONLINE!');
+});
 
+// Suas rotas antigas continuam abaixo...
+// app.get('/api/produtos/:guildId', ...)
 app.post('/api/criar-carrinho', async (req, res) => {
     const { userId, productId, guildId } = req.body;
     try {
@@ -777,8 +783,8 @@ app.get('/cloudflow-oauth', async (req, res) => {
 });
 
 // LIGA TUDO
-const PORT = process.env.PORT || 3000;
-expressServer.listen(PORT, () => {
+const PORT = process.env.PORT || 8080;
+expressServer.listen(PORT, '0.0.0.0', () => {
     console.log(`[API Unificada] 🚀 Express + Socket.io rodando na porta ${PORT}`);
 });
 client.on(Events.MessageCreate, async (message) => {
