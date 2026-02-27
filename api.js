@@ -38,7 +38,7 @@ module.exports = (client) => {
     expressServer.listen(process.env.PORT || 8080, '0.0.0.0', () => console.log(`[API MESTRE] 🚀 Express + Socket.io Rodando`));
 
     // ==========================================
-    // 🔄 LOOP DE FILA (Assíncrono) - CRIA O CARRINHO E AVISA O SITE
+    // 🔄 LOOP DE FILA (Assíncrono) - CRIA CARRINHO E ANOTA NO DB
     // ==========================================
     setInterval(async () => {
         try {
@@ -71,23 +71,21 @@ module.exports = (client) => {
                     ];
                     if (staffRoleId) perm.push({ id: staffRoleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
 
-                    // Cria o canal
+                    // 1. Cria o Canal
                     const cartChannel = await guild.channels.create({ 
                         name: `🛒・web-${userName}`, 
                         type: ChannelType.GuildText, 
                         permissionOverwrites: perm 
                     });
 
-                    // 🚀 MENSAGEM DE SAUDAÇÃO + IMAGEM (Requisitado)
+                    // 2. Manda a mensagem
                     if (product.welcome_message || product.image_data) {
                         const welcomeOptions = {};
                         if (product.welcome_message) welcomeOptions.content = product.welcome_message;
                         if (product.image_data) welcomeOptions.files = [new AttachmentBuilder(Buffer.from(product.image_data, 'base64'), { name: 'produto.png' })];
-                        
                         await cartChannel.send(welcomeOptions).catch(()=>{});
                     }
 
-                    // EMBED DO PAINEL DE PAGAMENTO
                     const embed = new EmbedBuilder()
                         .setTitle(`Pedido: ${product.name}`)
                         .setDescription('Reserva feita pelo Site! Efetue o pagamento com a Staff para liberação.')
@@ -105,13 +103,20 @@ module.exports = (client) => {
 
                     await cartChannel.send({ content: `||<@${user_id}> ${staffRoleId ? `<@&${staffRoleId}>` : ''}||`, embeds: [embed], components: [row] });
 
-                    // 🚀 SALVA O LINK DO CANAL DE VOLTA NO BANCO E AVISA O SITE PELO WEBSOCKET!
+                    // 3. 🔴 O PULO DO GATO: FORÇA A GRAVAÇÃO DO LINK NO BANCO
                     const channelUrl = `https://discord.com/channels/${guild.id}/${cartChannel.id}`;
-                    await db.query("UPDATE web_cart_requests SET status = 'completed', channel_url = $1 WHERE id = $2", [channelUrl, id]);
                     
-                    // Grita pro site que o pedido do cara tá pronto
-                    io.emit(`pedido_pronto_${id}`, { url: channelUrl });
-                    console.log(`[WebQueue] ✅ Carrinho criado para ${userName} no canal ${cartChannel.name}`);
+                    const updateResult = await db.query(
+                        "UPDATE web_cart_requests SET status = 'completed', channel_url = $1 WHERE id = $2 RETURNING id", 
+                        [channelUrl, id]
+                    );
+
+                    if (updateResult.rowCount > 0) {
+                        console.log(`[WebQueue] ✅ Carrinho Salvo no Banco! Link: ${channelUrl}`);
+                        io.emit(`pedido_pronto_${id}`, { url: channelUrl }); // Dispara o Websocket como plano A
+                    } else {
+                        console.log(`[WebQueue] ❌ ERRO: Não conseguiu salvar o link no Banco para o ID ${id}`);
+                    }
 
                 } catch (innerErr) {
                     await db.query("UPDATE web_cart_requests SET status = 'failed' WHERE id = $1", [id]);
@@ -119,5 +124,5 @@ module.exports = (client) => {
                 }
             }
         } catch (error) {}
-    }, 3000); // Reduzido pra 3 segundos para o cliente não esperar muito na tela
+    }, 2000); // Mais rápido! Deixei para verificar a cada 2s
 };
