@@ -1,23 +1,61 @@
+// Arquivo: api.js (No projeto do BOT)
+const express = require('express');
+const http = require('http');
+const cors = require('cors');
+const { Server } = require('socket.io');
 const db = require('./database.js'); 
 const { ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
-const { formatKK } = require('./utils/rpCurrency.js'); // Ajuste o caminho se necessário
+const { formatKK } = require('./utils/rpCurrency.js');
 
 module.exports = (client) => {
+    const app = express();
+    app.use(cors());
+    app.use(express.json({ limit: '50mb' })); 
+
+    const expressServer = http.createServer(app);
+    // 🚀 O MOTOR REAL-TIME
+    const io = new Server(expressServer, { cors: { origin: '*' } });
+    client.io = io; 
+
+    io.on('connection', (socket) => {
+        console.log(`[WebSocket] 🌐 Cliente Web Conectado: ${socket.id}`);
+    });
+
+    app.get('/', (req, res) => res.send('✅ API KODA OPERANTE'));
+
+    // Rota que o Site usa para avisar o Bot que rolou uma edição no Admin
+    app.post(['/api/vitrine/update', '/vitrine/update'], async (req, res) => {
+        try {
+            const { guildId } = req.body;
+            if (guildId) {
+                const updateVitrine = require('./utils/updateFerrariVitrine.js');
+                await updateVitrine(client, guildId);
+                // 🚀 Dispara para todos os navegadores abertos no Site!
+                io.emit('estoque_atualizado'); 
+            }
+            res.json({ success: true });
+        } catch (e) {
+            res.status(500).json({ error: 'Erro' });
+        }
+    });
+
+    expressServer.listen(process.env.PORT || 8080, '0.0.0.0', () => console.log(`[API MESTRE] 🚀 Express + Socket.io Rodando`));
+
+    // ==========================================
+    // 🔄 LOOP DE FILA (Assíncrono)
+    // ==========================================
     console.log("[WebQueue] 🔄 Iniciando monitoramento de pedidos via Banco de Dados...");
 
     setInterval(async () => {
         try {
-            // Verifica se a tabela existe (ignora erro se não)
             const tableCheck = await db.query("SELECT to_regclass('public.web_cart_requests')");
             if (!tableCheck.rows[0].to_regclass) return;
 
-            // Busca pedidos pendentes
             const pendingReqs = await db.query("SELECT * FROM web_cart_requests WHERE status = 'pending' LIMIT 5");
             
             for (const req of pendingReqs.rows) {
                 const { id, user_id, product_id, guild_id } = req;
                 
-                // Marca como processando para não repetir
                 await db.query("UPDATE web_cart_requests SET status = 'processing' WHERE id = $1", [id]);
 
                 try {
@@ -64,17 +102,13 @@ module.exports = (client) => {
                         await cartChannel.send({ files: [new AttachmentBuilder(Buffer.from(product.image_data, 'base64'), { name: 'carro.png' })] });
                     }
 
-                    // Marca como concluído
                     await db.query("UPDATE web_cart_requests SET status = 'completed' WHERE id = $1", [id]);
                     console.log(`[WebQueue] ✅ Carrinho criado para ${userName}`);
 
                 } catch (innerErr) {
-                    console.error(`[WebQueue] Erro ao processar pedido ${id}:`, innerErr.message);
                     await db.query("UPDATE web_cart_requests SET status = 'failed' WHERE id = $1", [id]);
                 }
             }
-        } catch (error) {
-            // Ignora erros de sincronia
-        }
-    }, 5000); // Roda a cada 5 segundos
+        } catch (error) {}
+    }, 5000); 
 };
