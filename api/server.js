@@ -5,25 +5,31 @@ const cors = require('cors');
 const db = require('../database.js');
 const { ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const { formatKK } = require('../utils/rpCurrency.js');
+const url = require('url'); // Importado para as rotas antigas
+
+// Importa as funções originais do Koda
+const { approvePurchase } = require('../utils/approvePurchase');
+const { updateCloudflowShowcase } = require('../utils/updateCloudflowShowcase');
 
 module.exports = (client) => {
     const app = express();
-    app.use(cors()); // Permite o site se conectar
-    app.use(express.json());
+    app.use(cors()); 
+
+    // O Mercado Pago envia JSON cru às vezes, então o Express precisa lidar com isso antes do limit 10mb
+    app.use(express.json({ limit: '10mb' })); 
 
     const server = http.createServer(app);
-    
-    // Inicia o WebSocket
     const io = new Server(server, { cors: { origin: '*' } });
-    
-    // Salva o IO dentro do client do Discord para usarmos em outros arquivos!
-    client.io = io;
+    client.io = io; // Salva o WebSocket no client do Discord
 
     io.on('connection', (socket) => {
-        console.log(`[WebSocket] 🌐 Novo cliente conectado no Site: ${socket.id}`);
+        console.log(`[WebSocket] 🌐 Cliente Web Conectado: ${socket.id}`);
     });
 
-    // 🔴 ROTA 1: O site pede a lista de carros para montar a vitrine web
+    // ==========================================
+    // 🔴 ROTAS NOVAS (FERRARI MOTORS WEB)
+    // ==========================================
+
     app.get('/api/produtos/:guildId', async (req, res) => {
         try {
             const { guildId } = req.params;
@@ -34,10 +40,8 @@ module.exports = (client) => {
         }
     });
 
-    // 🔴 ROTA 2: O cliente clica em "Comprar" no site. O site manda um POST pra cá criar o carrinho.
     app.post('/api/criar-carrinho', async (req, res) => {
         const { userId, productId, guildId } = req.body;
-
         try {
             const guild = client.guilds.cache.get(guildId);
             if (!guild) return res.status(404).json({ error: 'Servidor Discord não encontrado.' });
@@ -52,23 +56,18 @@ module.exports = (client) => {
             const user = await client.users.fetch(userId).catch(()=>null);
             const userName = user ? user.username : 'cliente-web';
 
-            // Monta as Permissões
             const permissionOverwrites = [
                 { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
                 { id: userId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
             ];
-            if (staffRoleId) {
-                permissionOverwrites.push({ id: staffRoleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
-            }
+            if (staffRoleId) permissionOverwrites.push({ id: staffRoleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
 
-            // CRIA O CANAL MÁGICO NO DISCORD
             const cartChannel = await guild.channels.create({
                 name: `🛒・web-${userName}`,
                 type: ChannelType.GuildText,
                 permissionOverwrites: permissionOverwrites
             });
 
-            // Envia o Painel da Staff
             const cartPanelEmbed = new EmbedBuilder()
                 .setTitle(`Pedido Web: ${product.name}`)
                 .setDescription('Sua reserva foi feita pelo Site! Efetue o pagamento com a Staff.')
@@ -85,21 +84,18 @@ module.exports = (client) => {
 
             await cartChannel.send({ content: `||<@${userId}> | ${staffRoleId ? `<@&${staffRoleId}>` : '@here'}||`, embeds: [cartPanelEmbed], components: [actionRow] });
 
-            // Manda a foto e detalhes por baixo
             const welcomeOptions = {};
             if (product.welcome_message && product.welcome_message.trim() !== '') welcomeOptions.content = product.welcome_message;
             if (product.image_data) welcomeOptions.files = [new AttachmentBuilder(Buffer.from(product.image_data, 'base64'), { name: 'produto.png' })];
             if (welcomeOptions.content || welcomeOptions.files) await cartChannel.send(welcomeOptions);
 
-            // RETORNA O DEEP LINK PRO SITE REDIRECIONAR O CLIENTE!
             res.json({ success: true, url: `https://discord.com/channels/${guild.id}/${cartChannel.id}` });
-
         } catch (e) {
-            console.error('[API] Erro ao criar carrinho web:', e);
+            console.error('[API] Erro ao criar carrinho:', e);
             res.status(500).json({ error: 'Erro interno no servidor' });
         }
     });
-    // 🔴 ROTA 3: Verifica se o usuário é STAFF no servidor
+
     app.get('/api/admin/check/:guildId/:userId', async (req, res) => {
         try {
             const { guildId, userId } = req.params;
@@ -120,7 +116,6 @@ module.exports = (client) => {
         }
     });
 
-    // 🔴 ROTA 4: Adiciona carro pelo Site
     app.post('/api/admin/add', async (req, res) => {
         try {
             const { guildId, name, welcome_message, image_data, quantity, price_kk } = req.body;
@@ -130,8 +125,8 @@ module.exports = (client) => {
             );
             
             const updateVitrine = require('../utils/updateFerrariVitrine.js');
-            await updateVitrine(client, guildId); // Atualiza no Discord
-            io.emit('estoque_atualizado'); // Atualiza os sites
+            await updateVitrine(client, guildId);
+            io.emit('estoque_atualizado'); 
 
             res.json({ success: true });
         } catch (e) {
@@ -140,26 +135,91 @@ module.exports = (client) => {
         }
     });
 
-    // 🔴 ROTA 5: Deleta carro pelo Site
-    app.delete('/api/admin/remove/:id', async (req, res) => {
-        try {
-            const { id } = req.params;
-            const { guildId } = req.body;
-            await db.query('DELETE FROM ferrari_stock_products WHERE id = $1', [id]);
-            
-            const updateVitrine = require('../utils/updateFerrariVitrine.js');
-            await updateVitrine(client, guildId);
-            io.emit('estoque_atualizado');
+    // ==========================================
+    // 🟢 ROTAS LEGADAS DO KODA V2 (TRANSFERIDAS DO INDEX.JS)
+    // ==========================================
 
-            res.json({ success: true });
-        } catch (e) {
-            res.status(500).json({ error: 'Erro ao deletar.' });
+    // Rota do Webhook do Mercado Pago
+    app.post('/mp-webhook', async (req, res) => {
+        // Responder rápido para o MP não dar timeout
+        res.sendStatus(200);
+
+        try {
+            const data = req.body;
+            console.log("Recebido Webhook do Mercado Pago:", data);
+            
+            if (data && data.type === 'payment' && data.data && data.data.id) {
+                const paymentId = data.data.id;
+                console.log(`Processando pagamento ID: ${paymentId}`);
+                await approvePurchase(paymentId, client);
+            }
+        } catch (error) {
+            console.error("Erro ao processar webhook do MP:", error);
         }
     });
 
-    // Roda na porta 3000 (ou a porta que o Discloud/Host te der)
+    // Rota do OAuth do Cloudflow
+    app.get('/cloudflow-oauth', async (req, res) => {
+        const parsedUrl = url.parse(req.url, true);
+        const code = parsedUrl.query.code;
+        const state = parsedUrl.query.state;
+
+        if (!code || !state) {
+            return res.status(400).send('Dados inválidos. Autorização falhou.');
+        }
+
+        try {
+            const [guildId, userId] = state.split('_');
+            
+            if (!guildId || !userId) {
+                return res.status(400).send('State inválido.');
+            }
+
+            const { exchangeOAuthCode } = require('../utils/guildBlueprintManager');
+            const success = await exchangeOAuthCode(guildId, userId, code);
+
+            if (success) {
+                // Tenta atualizar a showcase se existir
+                try {
+                     await updateCloudflowShowcase(client, guildId);
+                } catch(e) {
+                     console.error("Erro ao atualizar showcase após oauth:", e);
+                }
+                res.send(`
+                    <html>
+                    <head>
+                        <title>CloudFlow - Sucesso</title>
+                        <style>
+                            body { font-family: sans-serif; background-color: #2b2d31; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                            .box { background-color: #313338; padding: 40px; border-radius: 8px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                            h1 { color: #57F287; }
+                            p { color: #B5BAC1; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="box">
+                            <h1>✅ Verificado com Sucesso!</h1>
+                            <p>Sua conta foi vinculada ao CloudFlow da BasicFlow.</p>
+                            <p>Você já pode fechar esta janela e voltar para o Discord.</p>
+                        </div>
+                    </body>
+                    </html>
+                `);
+            } else {
+                 res.status(500).send('Erro ao processar o código de autorização. Tente novamente no Discord.');
+            }
+
+        } catch (error) {
+             console.error("Erro no callback OAuth do Cloudflow:", error);
+             res.status(500).send('Erro interno ao processar a requisição.');
+        }
+    });
+
+    // ==========================================
+    // INICIAR O SERVIDOR UNIFICADO
+    // ==========================================
     const PORT = process.env.PORT || 3000;
     server.listen(PORT, () => {
-        console.log(`[API] 🚀 Servidor Web & WebSocket rodando na porta ${PORT}`);
+        console.log(`[API Unificada] 🚀 Webhooks, OAuth e App Web rodando na porta ${PORT}`);
     });
 };
