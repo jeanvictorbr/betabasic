@@ -782,11 +782,7 @@ app.get('/cloudflow-oauth', async (req, res) => {
     }
 });
 
-// LIGA TUDO
-const PORT = process.env.PORT || 8080;
-expressServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`[API Unificada] 🚀 Express + Socket.io rodando na porta ${PORT}`);
-});
+
 client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
 
