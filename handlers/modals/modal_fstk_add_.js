@@ -3,11 +3,12 @@ const { EmbedBuilder } = require('discord.js');
 const updateVitrine = require('../../utils/updateFerrariVitrine.js');
 
 module.exports = {
+    // 🔴 O underline no final é obrigatório pra ele ler as categorias dinâmicas
     customId: 'modal_fstk_add_', 
     execute: async (interaction, guildSettings) => {
         await interaction.deferReply({ ephemeral: true });
 
-        // Extrai a categoria secreta que estava no ID
+        // O Bot "lembra" a categoria que estava escondida no ID
         const safeCat = interaction.customId.replace('modal_fstk_add_', '');
         const categoria = safeCat.replace(/-/g, ' '); 
 
@@ -21,16 +22,14 @@ module.exports = {
             [interaction.guildId, nome, categoria, preco, quantidade]
         );
 
-        // 2. Atualiza Vitrines do Discord na hora e avisa o Site (WebSocket)
+        // 2. Atualiza Vitrines do Discord na hora e avisa o Site
         try {
             await updateVitrine(interaction.client, interaction.guildId);
             if (interaction.client.io) interaction.client.io.emit('estoque_atualizado');
         } catch(e) {}
 
-        // 3. Sistema de Logs no Canal Oficial da Loja
-        // 🔴 PEGANDO O CANAL DE LOG OFICIAL DA CONFIGURAÇÃO DA LOJA 🔴
+        // 3. Sistema de Logs no Canal OFICIAL da sua loja!
         const logChannelId = guildSettings?.ferrari_log_channel; 
-        
         if (logChannelId) {
             const logChannel = await interaction.guild.channels.fetch(logChannelId).catch(() => null);
             if (logChannel) {
