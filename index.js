@@ -638,6 +638,31 @@ app.get(['/api/produtos/:guildId', '/produtos/:guildId'], async (req, res) => {
         res.status(500).json({ error: 'Erro ao buscar produtos' });
     }
 });
+// ==========================================
+// 🔴 ROTA DE ATUALIZAÇÃO SÊNIOR (SITE -> BOT)
+// ==========================================
+app.post(['/api/vitrine/update', '/vitrine/update'], async (req, res) => {
+    try {
+        const { guildId } = req.body;
+        if (guildId) {
+            console.log(`[API MESTRE] 🔄 Site solicitou atualização da Vitrine do Discord para a Guild ${guildId}...`);
+            
+            // Força pegar o atualizador mais novo e limpa cache antigo
+            delete require.cache[require.resolve('./utils/updateFerrariVitrine.js')];
+            const updateVitrine = require('./utils/updateFerrariVitrine.js');
+            
+            await updateVitrine(client, guildId);
+            console.log(`[API MESTRE] ✅ Vitrines do Discord atualizadas com sucesso!`);
+            
+            // Avisa o site (socket) que terminou pra ele atualizar o Front-End
+            io.emit('estoque_atualizado'); 
+        }
+        res.json({ success: true });
+    } catch (e) {
+        console.error('[API MESTRE] ❌ Erro ao atualizar vitrine:', e.message);
+        res.status(500).json({ error: 'Erro ao atualizar vitrine.' });
+    }
+});
 // Rota Base para testar se a API está online de fora
 app.get('/', (req, res) => {
     res.send('✅ API do Koda V2 está ONLINE!');
