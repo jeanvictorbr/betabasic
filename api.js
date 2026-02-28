@@ -22,7 +22,7 @@ module.exports = (client) => {
     app.get('/', (req, res) => res.send('✅ API KODA OPERANTE'));
 
     // ==========================================
-    // 🔴 ROTA QUE O SITE CHAMA PARA ATUALIZAR O DISCORD
+    // 🔴 ROTA DE ATUALIZAÇÃO (Onde o Site bate para avisar o Bot)
     // ==========================================
     app.post(['/api/vitrine/update', '/vitrine/update'], async (req, res) => {
         try {
@@ -30,19 +30,18 @@ module.exports = (client) => {
             if (guildId) {
                 console.log(`[API MESTRE] 🔄 Site solicitou atualização da Vitrine do Discord para a Guild ${guildId}...`);
                 
-                // Força limpar o cache para pegar a versão nova do atualizador Sênior
+                // Força pegar o atualizador mais novo e limpa cache antigo
                 delete require.cache[require.resolve('./utils/updateFerrariVitrine.js')];
                 const updateVitrine = require('./utils/updateFerrariVitrine.js');
                 
                 await updateVitrine(client, guildId);
-                console.log(`[API MESTRE] ✅ Vitrines do Discord atualizadas com sucesso!`);
                 
-                // Dispara o Websocket para o Front-end do Site recarregar sozinho
+                // Avisa o site (socket) que terminou pra ele atualizar o Front-End
                 io.emit('estoque_atualizado'); 
             }
             res.json({ success: true });
         } catch (e) {
-            console.error('[API MESTRE] ❌ Erro ao forçar atualização:', e);
+            console.error('[API MESTRE] ❌ Erro ao atualizar vitrine:', e.message);
             res.status(500).json({ error: 'Erro ao atualizar vitrine.' });
         }
     });
@@ -50,11 +49,10 @@ module.exports = (client) => {
     expressServer.listen(process.env.PORT || 8080, '0.0.0.0', () => console.log(`[API MESTRE] 🚀 Express + Socket.io Rodando`));
 
     // ==========================================
-    // 🛠️ AUTO-REPARO DO BANCO DE DADOS
+    // 🛠️ AUTO-REPARO DO BANCO DE DADOS (CARRINHOS)
     // ==========================================
     async function setupDatabase() {
         try {
-            // Garante que a tabela base existe
             await db.query(`CREATE TABLE IF NOT EXISTS web_cart_requests (
                 id SERIAL PRIMARY KEY,
                 user_id VARCHAR(50) NOT NULL,
@@ -63,33 +61,18 @@ module.exports = (client) => {
                 status VARCHAR(20) DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`);
-
-            // Força a injeção da coluna channel_url (Ignora o erro se ela já existir)
             await db.query(`ALTER TABLE web_cart_requests ADD COLUMN channel_url VARCHAR(255)`).catch(() => {});
-            
-            console.log("[WebQueue] ✅ Tabela de pedidos sincronizada e reparada com sucesso!");
-        } catch (err) {
-            console.error("[WebQueue] ❌ Erro ao reparar tabela:", err.message);
-        }
+        } catch (err) {}
     }
-    
-    // Chama o auto-reparo assim que o bot liga
     setupDatabase();
 
     // ==========================================
-    // 🔄 LOOP DE FILA (Assíncrono) - CRIA CARRINHO E ANOTA NO DB
+    // 🔄 LOOP DE FILA (CARRINHO DO SITE PRO DISCORD)
     // ==========================================
-    console.log("[WebQueue] 🔄 Iniciando monitoramento de pedidos via Banco de Dados...");
-
     setInterval(async () => {
         try {
-            // Buscando pedidos pendentes
             const pendingReqs = await db.query("SELECT * FROM web_cart_requests WHERE status = 'pending' LIMIT 5");
             
-            if (pendingReqs.rows.length > 0) {
-                console.log(`[WebQueue] 🛒 Encontrado(s) ${pendingReqs.rows.length} pedido(s) pendente(s)! Processando...`);
-            }
-
             for (const req of pendingReqs.rows) {
                 const { id, user_id, product_id, guild_id } = req;
                 
@@ -115,14 +98,12 @@ module.exports = (client) => {
                     ];
                     if (staffRoleId) perm.push({ id: staffRoleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
 
-                    // 1. Cria o Canal
                     const cartChannel = await guild.channels.create({ 
                         name: `🛒・web-${userName}`, 
                         type: ChannelType.GuildText, 
                         permissionOverwrites: perm 
                     });
 
-                    // 2. Manda a mensagem e foto
                     if (product.welcome_message || product.image_data) {
                         const welcomeOptions = {};
                         if (product.welcome_message) welcomeOptions.content = product.welcome_message;
@@ -147,7 +128,6 @@ module.exports = (client) => {
 
                     await cartChannel.send({ content: `||<@${user_id}> ${staffRoleId ? `<@&${staffRoleId}>` : ''}||`, embeds: [embed], components: [row] });
 
-                    // 3. SALVA O LINK NO BANCO (AGORA VAI FUNCIONAR PORQUE A COLUNA EXISTE)
                     const channelUrl = `https://discord.com/channels/${guild.id}/${cartChannel.id}`;
                     
                     const updateResult = await db.query(
@@ -156,20 +136,13 @@ module.exports = (client) => {
                     );
 
                     if (updateResult.rowCount > 0) {
-                        console.log(`[WebQueue] ✅ Carrinho Salvo no Banco com sucesso! Link: ${channelUrl}`);
                         io.emit(`pedido_pronto_${id}`, { url: channelUrl }); 
-                    } else {
-                        console.log(`[WebQueue] ❌ ERRO: Não conseguiu atualizar o status no Banco para o ID ${id}`);
-                    }
-
+                    } 
                 } catch (innerErr) {
                     await db.query("UPDATE web_cart_requests SET status = 'failed' WHERE id = $1", [id]);
-                    console.error(`[WebQueue] ❌ Erro ao criar o canal do pedido ${id}:`, innerErr.message);
                     io.emit(`pedido_erro_${id}`, { error: innerErr.message });
                 }
             }
-        } catch (error) {
-            console.error("[WebQueue] ❌ ERRO CRÍTICO NO LOOP DO BANCO DE DADOS:", error.message);
-        }
+        } catch (error) {}
     }, 2000); 
 };
