@@ -5,63 +5,100 @@ const { formatKK } = require('./rpCurrency.js');
 
 module.exports = async (client, guildId) => {
     try {
-        // Busca configurações da vitrine
+        // 1. Busca configurações gerais da loja (para Título, Descrição e Imagem)
         const guildRes = await db.query('SELECT * FROM guild_settings WHERE guild_id = $1', [guildId]);
         const settings = guildRes.rows[0];
+        
+        // Se não tiver configurações básicas, a gente não faz nada
+        if (!settings) return;
 
-        if (!settings || !settings.ferrari_vitrine_channel || !settings.ferrari_vitrine_msg) return;
+        // 2. Busca TODAS as vitrines que o bot postou nesse servidor
+        const vitrinesTrackingRes = await db.query('SELECT * FROM ferrari_vitrines_tracking WHERE guild_id = $1', [guildId]);
+        
+        // Se o bot ainda não postou nenhuma vitrine pelo comando novo, ignora
+        if (vitrinesTrackingRes.rows.length === 0) return;
 
-        // Busca o canal e a mensagem
-        const channel = await client.channels.fetch(settings.ferrari_vitrine_channel).catch(() => null);
-        if (!channel) return;
-        const message = await channel.messages.fetch(settings.ferrari_vitrine_msg).catch(() => null);
-        if (!message) return; // Se apagaram a mensagem, a gente ignora
+        // 3. Loop de atualização: Passa por cada mensagem postada e atualiza com sua categoria
+        for (const tracker of vitrinesTrackingRes.rows) {
+            try {
+                const { category, channel_id, message_id } = tracker;
 
-        // Busca o estoque atualizado (Apenas com quantidade > 0)
-        const res = await db.query('SELECT * FROM ferrari_stock_products WHERE guild_id = $1 AND quantity > 0 ORDER BY id ASC LIMIT 25', [guildId]);
+                // Tenta achar o canal e a mensagem no Discord
+                const channel = await client.channels.fetch(channel_id).catch(() => null);
+                if (!channel) continue;
+                const message = await channel.messages.fetch(message_id).catch(() => null);
+                if (!message) continue; // Se o staff apagou a mensagem na mão, a gente ignora
 
-        const title = settings.ferrari_vitrine_title || '🚘 Loja Premium | Estoque Imediato';
-        const desc = settings.ferrari_vitrine_desc || 'Confira nossos veículos a pronta entrega!';
-        const image = settings.ferrari_vitrine_image || null;
+                // 4. Busca os veículos no banco baseados na categoria daquela mensagem específica
+                let query = 'SELECT * FROM ferrari_stock_products WHERE guild_id = $1 AND quantity > 0';
+                let params = [guildId];
 
-        const embed = new EmbedBuilder()
-            .setTitle(title)
-            .setDescription(res.rows.length === 0 ? '❌ Nosso estoque esgotou no momento. Volte mais tarde!' : desc)
-            .setColor('#2b2d31');
+                if (category !== 'Todos') {
+                    query += ' AND category = $2';
+                    params.push(category);
+                }
+                query += ' ORDER BY id ASC LIMIT 25';
 
-        if (image && image.startsWith('http')) embed.setImage(image);
+                const res = await db.query(query, params);
 
-        let components = [];
+                // 5. Monta o Visual atualizado da Vitrine
+                let title = settings.ferrari_vitrine_title || '🚘 Centro Comercial | Estoque Imediato';
+                if (category !== 'Todos') title += ` - ${category}`;
 
-        if (res.rows.length > 0) {
-            let msgFields = '';
-            res.rows.forEach((prod, index) => {
-                msgFields += `**${index + 1}. ${prod.name}**\n└ 📦 Unidades: \`${prod.quantity}\` | 💰 Preço: **${formatKK(Number(prod.price_kk))}**\n\n`;
-            });
-            embed.addFields({ name: 'Veículos Disponíveis', value: msgFields });
+                const desc = settings.ferrari_vitrine_desc || 'Confira nossos veículos a pronta entrega!';
+                const image = settings.ferrari_vitrine_image || null;
 
-            const selectMenu = new StringSelectMenuBuilder()
-                .setCustomId('svit_select')
-                .setPlaceholder('🛒 Selecione o veículo que deseja comprar...')
-                .addOptions(res.rows.map(prod => ({
-                    label: prod.name,
-                    description: `Valor: ${formatKK(Number(prod.price_kk))} | Estoque: ${prod.quantity}`,
-                    value: prod.id.toString(),
-                    emoji: '🚘'
-                })));
+                // Cor padrão Azul Indigo
+                const embed = new EmbedBuilder()
+                    .setTitle(title)
+                    .setDescription(res.rows.length === 0 ? `❌ O estoque de **${category}** esgotou no momento. Volte mais tarde!` : desc)
+                    .setColor('#3b82f6');
 
-            components = [new ActionRowBuilder().addComponents(selectMenu)];
+                if (image && image.startsWith('http')) embed.setImage(image);
+
+                let components = [];
+
+                if (res.rows.length > 0) {
+                    let msgFields = '';
+                    res.rows.forEach((prod, index) => {
+                        msgFields += `**${index + 1}. ${prod.name}**\n└ 📦 Unidades: \`${prod.quantity}\` | 💰 Preço: **${formatKK(Number(prod.price_kk))}**\n\n`;
+                    });
+                    embed.addFields({ name: 'Veículos Disponíveis', value: msgFields });
+
+                    // Escolhe o emoji baseado na categoria
+                    let emojiIcon = '🚘';
+                    if (category === 'Motos') emojiIcon = '🏍️';
+                    if (category === 'Utilitários') emojiIcon = '🚐';
+
+                    const selectMenu = new StringSelectMenuBuilder()
+                        .setCustomId('svit_select')
+                        .setPlaceholder(`🛒 Selecione a opção (${category})...`)
+                        .addOptions(res.rows.map(prod => ({
+                            label: prod.name,
+                            description: `Valor: ${formatKK(Number(prod.price_kk))} | Estoque: ${prod.quantity}`,
+                            value: prod.id.toString(),
+                            emoji: emojiIcon
+                        })));
+
+                    components = [new ActionRowBuilder().addComponents(selectMenu)];
+                }
+
+                // 6. Edita a mensagem da vitrine específica
+                await message.edit({ embeds: [embed], components: components }).catch(()=>{});
+
+            } catch (innerErr) {
+                console.error(`[Update Vitrine] Falha ao atualizar a vitrine de ${tracker.category}:`, innerErr);
+            }
         }
 
-        // Edita a mensagem da vitrine viva!
-        await message.edit({ embeds: [embed], components: components });
-// 👇 A MÁGICA DO WEBSOCKET AQUI 👇
+        // 7. 👇 A MÁGICA DO WEBSOCKET AQUI 👇
         // Dispara um sinal para todos os sites conectados recarregarem a lista de carros!
         if (client.io) {
             client.io.emit('estoque_atualizado');
             console.log('[WebSocket] Sinal de atualização enviado para o site!');
         }
+
     } catch (e) {
-        console.error('[Update Vitrine] Erro ao atualizar vitrine:', e);
+        console.error('[Update Vitrine] Erro geral ao atualizar vitrines:', e);
     }
 };
