@@ -21,17 +21,29 @@ module.exports = (client) => {
 
     app.get('/', (req, res) => res.send('✅ API KODA OPERANTE'));
 
+    // ==========================================
+    // 🔴 ROTA QUE O SITE CHAMA PARA ATUALIZAR O DISCORD
+    // ==========================================
     app.post(['/api/vitrine/update', '/vitrine/update'], async (req, res) => {
         try {
             const { guildId } = req.body;
             if (guildId) {
+                console.log(`[API MESTRE] 🔄 Site solicitou atualização da Vitrine do Discord para a Guild ${guildId}...`);
+                
+                // Força limpar o cache para pegar a versão nova do atualizador Sênior
+                delete require.cache[require.resolve('./utils/updateFerrariVitrine.js')];
                 const updateVitrine = require('./utils/updateFerrariVitrine.js');
+                
                 await updateVitrine(client, guildId);
+                console.log(`[API MESTRE] ✅ Vitrines do Discord atualizadas com sucesso!`);
+                
+                // Dispara o Websocket para o Front-end do Site recarregar sozinho
                 io.emit('estoque_atualizado'); 
             }
             res.json({ success: true });
         } catch (e) {
-            res.status(500).json({ error: 'Erro' });
+            console.error('[API MESTRE] ❌ Erro ao forçar atualização:', e);
+            res.status(500).json({ error: 'Erro ao atualizar vitrine.' });
         }
     });
 
