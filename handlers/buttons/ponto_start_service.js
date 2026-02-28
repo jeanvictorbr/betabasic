@@ -16,7 +16,16 @@ module.exports = {
         `, [userId, guildId]);
 
         if (check.rows.length > 0) {
-            return interaction.reply(pontoDashboard(check.rows[0], interaction.member));
+            const dashboard = pontoDashboard(check.rows[0], interaction.member);
+            
+            try {
+                // Tenta mandar o painel na DM
+                await interaction.user.send({ ...dashboard, content: '📋 Aqui está o painel do seu serviço que já estava ativo:' });
+                return interaction.reply({ content: '✅ Você já possui um serviço ativo! Enviei o seu painel de controle no seu privado (DM).', ephemeral: true });
+            } catch (err) {
+                // Se a DM do usuário estiver fechada, manda efêmero no chat mesmo (Fallback)
+                return interaction.reply({ ...dashboard, content: '❌ **Aviso:** Sua DM está fechada! Aqui está o painel do seu serviço ativo:', ephemeral: true });
+            }
         }
 
         const result = await db.query(`
@@ -32,6 +41,16 @@ module.exports = {
         managePontoRole(interaction.client, guildId, userId, 'ADD'); // <--- DAR CARGO
 
         const dashboard = pontoDashboard(session, interaction.member);
-        await interaction.reply(dashboard);
+        
+        try {
+            // Tenta mandar o painel completão na DM na hora que inicia
+            await interaction.user.send({ ...dashboard, content: '🚀 **Seu turno foi iniciado!** Aqui está o seu painel de controle:' });
+            
+            // Avisa no chat que deu certo
+            await interaction.reply({ content: '✅ Serviço iniciado com sucesso!\nO seu **Painel de Controle** foi enviado no meu privado (DM) para você gerenciar o turno sem poluir o chat.', ephemeral: true });
+        } catch (err) {
+            // Se a DM estiver fechada, não quebra o bot, só manda no canal efêmero
+            await interaction.reply({ ...dashboard, content: '✅ Serviço iniciado com sucesso!\n⚠️ **Aviso:** Como sua DM está fechada, enviei o painel aqui no chat mesmo. Recomendo abrir a DM nas configurações de privacidade!\n', ephemeral: true });
+        }
     }
 };
