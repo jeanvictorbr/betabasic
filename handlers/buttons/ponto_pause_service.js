@@ -1,21 +1,28 @@
 const db = require('../../database.js');
 const pontoDashboard = require('../../ui/pontoDashboardPessoalV2.js');
 const { updatePontoLog } = require('../../utils/pontoLogManager.js');
-const { managePontoRole } = require('../../utils/pontoRoleManager.js'); // <--- NOVO
+const { managePontoRole } = require('../../utils/pontoRoleManager.js');
 
 module.exports = {
     customId: 'ponto_pause_service',
     async execute(interaction) {
         const userId = interaction.user.id;
-        const guildId = interaction.guild.id;
-
+        
+        // 🔴 AQUI É ONDE DAVA ERRO: Tiramos o interaction.guild.id!
+        
         const result = await db.query(`
             SELECT * FROM ponto_sessions 
-            WHERE user_id = $1 AND guild_id = $2 AND (status = 'OPEN' OR status IS NULL)
-        `, [userId, guildId]);
+            WHERE user_id = $1 AND (status = 'OPEN' OR status IS NULL)
+            ORDER BY session_id DESC LIMIT 1
+        `, [userId]);
 
         if (result.rows.length === 0) return interaction.reply({ content: "Erro: Sessão não encontrada.", flags: 1<<6 });
+        
         const session = result.rows[0];
+        
+        // 🟢 A MÁGICA: Pegamos o ID do servidor direto do Banco de Dados!
+        const guildId = session.guild_id;
+
         if (session.is_paused) return interaction.reply({ content: "Já pausado.", flags: 1<<6 });
 
         const now = new Date();
@@ -29,9 +36,9 @@ module.exports = {
         
         // --- AÇÕES ---
         updatePontoLog(interaction.client, updatedSession, interaction.user);
-        managePontoRole(interaction.client, guildId, userId, 'REMOVE'); // <--- REMOVER CARGO
+        managePontoRole(interaction.client, guildId, userId, 'REMOVE'); 
         
-        const ui = pontoDashboard(updatedSession, interaction.member);
+        const ui = pontoDashboard(updatedSession, interaction.member || interaction.user);
         await interaction.update(ui);
     }
 };
