@@ -146,3 +146,35 @@ module.exports = (client) => {
         } catch (error) {}
     }, 2000); 
 };
+// ==========================================
+    // 🔄 LOOP SÊNIOR: BOT LENDO OS "BILHETES" DO SITE VIA BANCO DE DADOS
+    // ==========================================
+    setInterval(async () => {
+        try {
+            // Verifica se a tabela existe (ignora se não)
+            await db.query(`CREATE TABLE IF NOT EXISTS bot_sync_tasks (id SERIAL PRIMARY KEY, guild_id VARCHAR(50), task VARCHAR(50))`).catch(()=>{});
+            
+            // Puxa os bilhetes que o Site deixou
+            const syncReqs = await db.query("SELECT * FROM bot_sync_tasks LIMIT 5");
+            
+            for (const task of syncReqs.rows) {
+                // Rasga o bilhete para não repetir
+                await db.query("DELETE FROM bot_sync_tasks WHERE id = $1", [task.id]);
+                
+                if (task.task === 'update_vitrine') {
+                    console.log(`[SYNC DB] 🔄 Bot leu o bilhete do Site! Atualizando Vitrine do Discord para a Guild ${task.guild_id}...`);
+                    
+                    // Força carregar o arquivo atualizado
+                    delete require.cache[require.resolve('./utils/updateFerrariVitrine.js')];
+                    const updateVitrine = require('./utils/updateFerrariVitrine.js');
+                    
+                    // Atualiza a mensagem no Discord na HORA!
+                    await updateVitrine(client, task.guild_id);
+                    
+                    console.log(`[SYNC DB] ✅ Vitrine do Discord atualizada com sucesso!`);
+                }
+            }
+        } catch (error) {
+            // Ignora erros silenciosos de banco
+        }
+    }, 2000); // O Bot checa o banco a cada 2 segundos
