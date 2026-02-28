@@ -605,7 +605,28 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 });
 
+// ==========================================
+// 🚀 SERVIDOR FULL STACK UNIFICADO (EXPRESS + WEBSOCKETS)
+// ==========================================
+const express = require('express');
+const http = require('http');
+const cors = require('cors');
+const { Server } = require('socket.io');
+const url = require('url');
 
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '10mb' })); // Limite alto para imagens
+
+const expressServer = http.createServer(app);
+const io = new Server(expressServer, { cors: { origin: '*' } });
+
+// Salva o io no client para podermos usar no updateFerrariVitrine
+client.io = io; 
+
+io.on('connection', (socket) => {
+    console.log(`[WebSocket] 🌐 Cliente Web Conectado: ${socket.id}`);
+});
 
 // 🔴 ROTAS DO MÓDULO FERRARI (SITE) - Agora com roteamento duplo!
 app.get(['/api/produtos/:guildId', '/produtos/:guildId'], async (req, res) => {
