@@ -33,8 +33,10 @@ module.exports = {
             if (interaction.client.io) interaction.client.io.emit('estoque_atualizado');
         } catch(e) {}
 
-        // Envia os Logs
-        const logChannelId = guildSettings?.ferrari_logs_channel;
+        // Envia os Logs para o Canal Oficial
+        // 🔴 PEGANDO O CANAL DE LOG OFICIAL DA CONFIGURAÇÃO DA LOJA 🔴
+        const logChannelId = guildSettings?.ferrari_log_channel; 
+        
         if (logChannelId) {
             const logChannel = await interaction.guild.channels.fetch(logChannelId).catch(() => null);
             if (logChannel) {

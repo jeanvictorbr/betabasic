@@ -3,8 +3,11 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('
 module.exports = {
     customId: 'fstk_open',
     execute: async (interaction, guildSettings) => {
+        const isStaff = guildSettings?.ferrari_staff_role && interaction.member.roles.cache.has(guildSettings.ferrari_staff_role);
+        const isAdmin = interaction.member.permissions.has('Administrator');
+
         // Trava de Segurança
-        if (guildSettings?.ferrari_staff_role && !interaction.member.roles.cache.has(guildSettings.ferrari_staff_role) && !interaction.member.permissions.has('Administrator')) {
+        if (!isStaff && !isAdmin) {
             return interaction.reply({ content: '❌ Você não tem permissão da Staff para gerenciar o estoque.', ephemeral: true });
         }
 
@@ -15,7 +18,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('fstk_action_add').setLabel('Adicionar Novo Veículo').setStyle(ButtonStyle.Success).setEmoji('➕'),
-            new ButtonBuilder().setCustomId('fstk_action_edit').setLabel('Editar/Excluir Veículo').setStyle(ButtonStyle.Primary).setEmoji('✏️')
+            new ButtonBuilder().setCustomId('fstk_action_edit').setLabel('Editar / Excluir').setStyle(ButtonStyle.Primary).setEmoji('✏️')
         );
 
         await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });

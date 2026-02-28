@@ -3,12 +3,15 @@ const { EmbedBuilder } = require('discord.js');
 const updateVitrine = require('../../utils/updateFerrariVitrine.js');
 
 module.exports = {
-    customId: 'modal_fstk_add',
+    customId: 'modal_fstk_add_', 
     execute: async (interaction, guildSettings) => {
         await interaction.deferReply({ ephemeral: true });
 
+        // Extrai a categoria secreta que estava no ID
+        const safeCat = interaction.customId.replace('modal_fstk_add_', '');
+        const categoria = safeCat.replace(/-/g, ' '); 
+
         const nome = interaction.fields.getTextInputValue('v_name');
-        const categoria = interaction.fields.getTextInputValue('v_cat');
         const preco = interaction.fields.getTextInputValue('v_price');
         const quantidade = interaction.fields.getTextInputValue('v_qty');
 
@@ -18,14 +21,16 @@ module.exports = {
             [interaction.guildId, nome, categoria, preco, quantidade]
         );
 
-        // 2. Atualiza Vitrines do Discord na hora e avisa o Site
+        // 2. Atualiza Vitrines do Discord na hora e avisa o Site (WebSocket)
         try {
             await updateVitrine(interaction.client, interaction.guildId);
             if (interaction.client.io) interaction.client.io.emit('estoque_atualizado');
         } catch(e) {}
 
-        // 3. Sistema de Logs
-        const logChannelId = guildSettings?.ferrari_logs_channel;
+        // 3. Sistema de Logs no Canal Oficial da Loja
+        // 🔴 PEGANDO O CANAL DE LOG OFICIAL DA CONFIGURAÇÃO DA LOJA 🔴
+        const logChannelId = guildSettings?.ferrari_log_channel; 
+        
         if (logChannelId) {
             const logChannel = await interaction.guild.channels.fetch(logChannelId).catch(() => null);
             if (logChannel) {
@@ -40,6 +45,6 @@ module.exports = {
             }
         }
 
-        await interaction.editReply({ content: `✅ O veículo **${nome}** foi adicionado ao estoque e as vitrines foram atualizadas!` });
+        await interaction.editReply({ content: `✅ O veículo **${nome}** foi adicionado com sucesso em **${categoria}** e as vitrines já atualizaram!` });
     }
 };
