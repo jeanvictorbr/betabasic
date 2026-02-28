@@ -1,41 +1,47 @@
 const db = require('../../database.js');
 const pontoDashboard = require('../../ui/pontoDashboardPessoalV2.js');
 const { updatePontoLog } = require('../../utils/pontoLogManager.js');
-const { managePontoRole } = require('../../utils/pontoRoleManager.js'); // <--- NOVO
 
 module.exports = {
     customId: 'ponto_resume_service',
     async execute(interaction) {
         const userId = interaction.user.id;
-        const guildId = interaction.guild.id;
 
-        const result = await db.query(`
+        const check = await db.query(`
             SELECT * FROM ponto_sessions 
-            WHERE user_id = $1 AND guild_id = $2 AND (status = 'OPEN' OR status IS NULL)
-        `, [userId, guildId]);
+            WHERE user_id = $1 AND (status = 'OPEN' OR status IS NULL)
+        `, [userId]);
 
-        if (result.rows.length === 0) return interaction.reply({ content: "Erro.", flags: 1<<6 });
-        const session = result.rows[0];
-        if (!session.is_paused) return interaction.reply({ content: "Não está pausado.", flags: 1<<6 });
+        if (check.rows.length === 0) {
+            return interaction.reply({ content: '❌ Nenhum serviço ativo encontrado.', ephemeral: true });
+        }
 
-        const now = Date.now();
-        const lastPauseMs = session.last_pause_time ? new Date(session.last_pause_time).getTime() : now;
-        const safeLastPause = isNaN(lastPauseMs) ? now : lastPauseMs;
-        const pauseDuration = now - safeLastPause;
-        const newTotalPause = parseInt(session.total_paused_ms || 0) + pauseDuration;
+        const session = check.rows[0];
 
-        await db.query(`
-            UPDATE ponto_sessions SET is_paused = FALSE, total_paused_ms = $1, last_pause_time = NULL WHERE session_id = $2
-        `, [newTotalPause, session.session_id]);
+        if (!session.is_paused) {
+            return interaction.reply({ content: '⚠️ Seu serviço não está pausado.', ephemeral: true });
+        }
 
-        const updatedResult = await db.query('SELECT * FROM ponto_sessions WHERE session_id = $1', [session.session_id]);
-        const updatedSession = updatedResult.rows[0];
+        const now = new Date();
+        const pauseTime = session.last_pause_time ? new Date(session.last_pause_time) : now;
+        const pausedDuration = now.getTime() - pauseTime.getTime();
+        
+        const newTotalPaused = (session.total_paused_ms || 0) + pausedDuration;
 
-        // --- AÇÕES ---
+        const updatedSessionRes = await db.query(`
+            UPDATE ponto_sessions
+            SET is_paused = false,
+                last_pause_time = NULL,
+                total_paused_ms = $1
+            WHERE id = $2
+            RETURNING *;
+        `, [newTotalPaused, session.id]);
+
+        const updatedSession = updatedSessionRes.rows[0];
+
         updatePontoLog(interaction.client, updatedSession, interaction.user);
-        managePontoRole(interaction.client, guildId, userId, 'ADD'); // <--- DEVOLVER CARGO
 
-        const ui = pontoDashboard(updatedSession, interaction.member);
-        await interaction.update(ui);
+        const dashboard = pontoDashboard(updatedSession, interaction.member || interaction.user);
+        await interaction.update(dashboard);
     }
 };
