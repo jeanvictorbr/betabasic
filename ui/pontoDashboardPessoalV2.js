@@ -44,11 +44,16 @@ module.exports = (session, member) => {
         }
     ];
 
+    // 🔴 CORREÇÃO DA DM AQUI: 
+    // Se for DM, puxa o nome e o avatar do usuário. Se for no servidor, puxa o ícone da Guild.
+    const displayName = member.displayName || member.username || 'Funcionário';
+    const safeIconUrl = member.guild ? member.guild.iconURL() : member.displayAvatarURL();
+
     return {
         content: "",
         embeds: [
             {
-                title: `Painel de Ponto: ${member.displayName}`,
+                title: `Painel de Ponto: ${displayName}`,
                 description: statusDescription,
                 color: color,
                 fields: [
@@ -64,14 +69,13 @@ module.exports = (session, member) => {
                     },
                     {
                         name: "📅 Início da Sessão",
-                        // AQUI ESTAVA O ERRO: Usamos timeData.startTimestamp calculado corretamente
                         value: `<t:${timeData.startTimestamp}:f> (<t:${timeData.startTimestamp}:R>)`,
                         inline: false
                     }
                 ],
                 footer: {
                     text: "Koda Time Tracking • Stable",
-                    icon_url: member.guild.iconURL()
+                    icon_url: safeIconUrl // Agora é 100% seguro contra DMs!
                 },
                 timestamp: new Date().toISOString()
             }
