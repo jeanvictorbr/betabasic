@@ -25,7 +25,10 @@ async function approvePurchase(client, guildId, cartChannelId, staffMember = nul
         }
 
         const settings = (await client_db.query('SELECT * FROM guild_settings WHERE guild_id = $1', [guildId])).rows[0] || {};
-        const staffId = staffMember ? staffMember.id : client.user.id; // Se for nulo (automático), usa o ID do Bot
+        
+        // 🟢 Pega o ID de quem aprovou a venda (se for nulo, usa o do bot)
+        const staffId = staffMember ? (staffMember.id || staffMember.user?.id) : client.user.id; 
+        
         const logChannel = settings.store_log_channel_id ? await guild.channels.fetch(settings.store_log_channel_id).catch(() => null) : null;
         const publicLogChannel = settings.store_public_log_channel_id ? await guild.channels.fetch(settings.store_public_log_channel_id).catch(() => null) : null;
 
@@ -61,7 +64,7 @@ async function approvePurchase(client, guildId, cartChannelId, staffMember = nul
                 continue;
             }
 
-            // CORREÇÃO 1: Somar ao total calculado para garantir que não seja nulo
+            // Somar ao total calculado para garantir que não seja nulo
             calculatedTotal += parseFloat(product.price) * quantity;
 
             if (product.category_id) affectedCategories.add(product.category_id);
@@ -114,7 +117,7 @@ async function approvePurchase(client, guildId, cartChannelId, staffMember = nul
             }
         }
         
-        // CORREÇÃO 2: Aplicar desconto do cupom se houver (no cálculo seguro)
+        // Aplicar desconto do cupom se houver
         if (cart.coupon_id) {
             const couponRes = await client_db.query('SELECT discount_percent FROM store_coupons WHERE id = $1', [cart.coupon_id]);
             if (couponRes.rows.length > 0) {
@@ -123,7 +126,7 @@ async function approvePurchase(client, guildId, cartChannelId, staffMember = nul
             }
         }
 
-        // Formata o total final para string com 2 casas decimais (evita null)
+        // Formata o total final para string com 2 casas decimais
         const finalTotalToSave = Math.max(0, calculatedTotal).toFixed(2);
 
         // 3. Cargo de Cliente
@@ -155,19 +158,20 @@ async function approvePurchase(client, guildId, cartChannelId, staffMember = nul
         }
 
         // 5. Atualizar Carrinho e Logar Venda
-        // CORREÇÃO 3: Usar 'finalTotalToSave' em vez de 'cart.total_price' (que pode ser null)
         await client_db.query("UPDATE store_carts SET status = 'delivered', claimed_by_staff_id = $1, total_price = $3 WHERE channel_id = $2", [staffId, cartChannelId, finalTotalToSave]);
         
+        // 🟢 Garante que a coluna staff_id existe para vincular a venda a quem clicou e salvar nas métricas
+        await client_db.query("ALTER TABLE store_sales_log ADD COLUMN IF NOT EXISTS staff_id VARCHAR(50)");
+        
         await client_db.query(
-            "INSERT INTO store_sales_log (guild_id, user_id, total_amount, product_details, status, created_at) VALUES ($1, $2, $3, $4::jsonb, 'completed', NOW())",
-            [guildId, member.id, finalTotalToSave, JSON.stringify(productDetailsForLog)]
+            "INSERT INTO store_sales_log (guild_id, user_id, staff_id, total_amount, product_details, status, created_at) VALUES ($1, $2, $3, $4, $5::jsonb, 'completed', NOW())",
+            [guildId, member.id, staffId, finalTotalToSave, JSON.stringify(productDetailsForLog)]
         );
         
         // 6. Logar no canal privado
         const logEmbed = new EmbedBuilder()
             .setTitle('✅ Venda Aprovada')
             .setColor('Green')
-            // CORREÇÃO 4: Exibir o preço calculado no Embed
             .setDescription(`**Cliente:** ${member} (\`${member.id}\`)\n**Atendente:** <@${staffId}>\n**Valor:** \`R$ ${finalTotalToSave}\`\n**ID Carrinho:** \`${cart.channel_id}\``)
             .addFields({ name: 'Itens Entregues', value: productDetailsForLog.map(p => `• ${p.quantity}x ${p.name}`).join('\n') })
             .setTimestamp();

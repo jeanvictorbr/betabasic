@@ -1,7 +1,7 @@
 // handlers/buttons/store_staff_approve_payment.js
 const db = require('../../database.js');
 const { EPHEMERAL_FLAG } = require('../../utils/constants.js');
-const { approvePurchase } = require('../../utils/approvePurchase.js'); // Importa o novo util
+const { approvePurchase } = require('../../utils/approvePurchase.js'); // Importa o util atualizado
 const generateStaffCartPanel = require('../../ui/store/staffCartPanel.js');
 
 module.exports = {
@@ -34,12 +34,13 @@ module.exports = {
                 return interaction.editReply({ content: '❌ Você não tem permissão para aprovar pagamentos.' });
             }
             
-            // 3. Chamar a lógica de aprovação centralizada
+            // 3. Chamar a lógica de aprovação centralizada (agora vinculando o Vendedor/Staff)
+            const staffExecuter = interaction.member || interaction.user; 
             const approvalResult = await approvePurchase(
                 interaction.client,
                 interaction.guild.id,
                 cartChannelId,
-                interaction.member // Passa o staff que aprovou
+                staffExecuter // 🟢 Venda vinculada a quem clicou!
             );
 
             if (!approvalResult.success) {
@@ -48,10 +49,9 @@ module.exports = {
                 });
             }
 
-            // 4. Atualizar o painel do staff (se a interação for de um botão no painel)
+            // 4. Atualizar o painel do staff
             if (interaction.message) {
                 const customer = await interaction.client.users.fetch(cart.user_id).catch(() => ({ tag: 'Desconhecido', displayAvatarURL: () => null }));
-                // Re-busca o carrinho para obter o status 'delivered'
                 const updatedCart = (await db.query('SELECT * FROM store_carts WHERE channel_id = $1', [cartChannelId])).rows[0];
                 const updatedPanel = generateStaffCartPanel(updatedCart, cart.products_json || [], customer);
                 
@@ -60,12 +60,11 @@ module.exports = {
 
             // 5. Notificar o staff e agendar fechamento
             await interaction.editReply({
-                content: `✅ Pagamento de <@${cart.user_id}> aprovado com sucesso! Os produtos foram entregues. Este canal será fechado em 10 segundos.`
+                content: `✅ Pagamento de <@${cart.user_id}> aprovado com sucesso! Venda registrada no seu nome. Este canal será fechado em 10 segundos.`
             });
             
             setTimeout(async () => {
                 try {
-                    // Garante que vai deletar o canal pai se for uma thread
                     const channelToClose = interaction.channel.isThread() ? interaction.channel.parent : interaction.channel;
                     if (channelToClose) {
                         await channelToClose.delete('Compra aprovada pelo staff.');
@@ -73,7 +72,7 @@ module.exports = {
                 } catch (e) {
                     console.error(`[Store Approve] Falha ao deletar canal ${cartChannelId}:`, e);
                 }
-            }, 10000); // 10 segundos
+            }, 10000); 
 
         } catch (error) {
             console.error('[store_staff_approve_payment] Erro ao aprovar pagamento:', error);
